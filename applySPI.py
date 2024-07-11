@@ -19,7 +19,7 @@ def main():
 
     # set up the calculation of dependency measures
     tt = time.perf_counter()
-    calc = Calculator(dataset=dataset.to_numpy().T, subset='all')
+    calc = Calculator(dataset=dataset.to_numpy().T, subset='fast')
 
     # get the results
     calc.compute()
