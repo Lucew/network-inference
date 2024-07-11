@@ -1,4 +1,6 @@
 numpy
 pyspi
+pyarrow
 pandas
 dill
+scikit-learn

@@ -10,7 +10,6 @@ import dill
 def main():
     # get the dataset
     dataset, _, _ = ld.load_data(sample_rate='1min')
-    dataset = dataset[dataset.columns[:50]]
     print(f'We have {dataset.shape[1]} signals with {dataset.shape[0]} samples per signal.')
 
     # get rid of rooms that have constant signals
