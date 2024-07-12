@@ -19,14 +19,15 @@ def main():
 
     # set up the calculation of dependency measures
     tt = time.perf_counter()
-    calc = Calculator(dataset=dataset.to_numpy().T, subset='fast')
+    subset = 'fast'
+    calc = Calculator(dataset=dataset.to_numpy().T, subset=subset)
 
     # get the results
     calc.compute()
     print('Computation took', time.perf_counter()-tt, 'Seconds')
 
     # save the calculator object as a .pkl
-    with open('saved_calculator_name.pkl', 'wb') as f:
+    with open(f'saved_calculator_{subset}.pkl', 'wb') as f:
         dill.dump(calc, f)
     return calc
 
