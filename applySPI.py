@@ -1,3 +1,6 @@
+import argparse
+import os.path
+
 import numpy as np
 from pyspi.calculator import Calculator
 import loadData as ld
@@ -7,10 +10,15 @@ from sklearn.preprocessing import StandardScaler
 import dill
 
 
-def main():
+def main(path: str, dataset: str = 'keti', subset: str = 'fast'):
     # get the dataset
-    dataset, _, _ = ld.load_data(sample_rate='1min')
-    print(f'We have {dataset.shape[1]} signals with {dataset.shape[0]} samples per signal.')
+    if dataset == 'keti':
+        dataset, _, _ = ld.load_keti(os.path.join(path, 'KETI'), sample_rate='1min')
+    elif dataset == 'soda':
+        dataset, _, _ = ld.load_soda(os.path.join(path, 'Soda'), sample_rate='1min')
+    else:
+        raise ValueError('Did not recognize the specified dataset.')
+    print(f'From data set {dataset}, we have {dataset.shape[1]} signals with {dataset.shape[0]} samples per signal.')
 
     # get rid of rooms that have constant signals
     std = dataset.std()
@@ -19,7 +27,9 @@ def main():
 
     # set up the calculation of dependency measures
     tt = time.perf_counter()
-    subset = 'fast'
+    allowed_subsets = ['fast', 'all', 'sonnet', 'fabfour']
+    if subset not in allowed_subsets:
+        raise ValueError(f'Subset {subset} not allowed. Only {allowed_subsets} supported.')
     calc = Calculator(dataset=dataset.to_numpy().T, subset=subset)
 
     # get the results
@@ -27,10 +37,14 @@ def main():
     print('Computation took', time.perf_counter()-tt, 'Seconds')
 
     # save the calculator object as a .pkl
-    with open(f'saved_calculator_{subset}.pkl', 'wb') as f:
+    with open(f'saved_calculator_{dataset}_{subset}.pkl', 'wb') as f:
         dill.dump(calc, f)
     return calc
 
 
 if __name__ == '__main__':
-    main()
+    _parser = argparse.ArgumentParser()
+    _parser.add_argument('-p', '--path', type=str, default=r"C:\Users\Lucas\Data")
+    _parser.add_argument('-d', '--dataset', type=str, required=True)
+    _args = _parser.parse_args()
+    main(_args.path, _args.dataset)

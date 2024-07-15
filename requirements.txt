@@ -4,3 +4,4 @@ pyarrow
 pandas
 dill
 scikit-learn
+tqdm

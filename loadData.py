@@ -1,3 +1,5 @@
+import collections
+
 import pandas as pd
 import multiprocessing as mp
 from glob import glob
@@ -113,8 +115,7 @@ def load_data_from_folder(path: str) -> dict[str: pd.DataFrame]:
     return path, files, start_timestamp, end_timestamp
 
 
-def load_data(path: str = r'C:\Users\Lucas\Data\KETI',
-              sample_rate: str = '10min') -> dict[str: dict[str: pd.DataFrame]]:
+def load_keti(path: str, sample_rate: str):
 
     # find all the folders in the directory
     folders = glob(os.path.join(path, f'*{os.path.sep}'))
@@ -171,3 +172,141 @@ def load_data(path: str = r'C:\Users\Lucas\Data\KETI',
     # make information print
     print(f'Loaded and resampled all with sampling rate {sample_rate} signals from {start} with length {length}.')
     return df, length, start
+
+
+def read_soda_ground_truth(path: str):
+    """
+    modified from
+    https://github.com/MingzheWu418/Joint-Training/blob/79f112114d182738444ddebbf23c4a14250d0eb4/colocation/Data.py#L55
+
+    :param path: the path where the ground truth is located
+    :return: the sensor with corresponding room information
+    """
+
+    # get the lines of the ground truth file
+    with open(path, 'r') as filet:
+        file_lines = filet.readlines()
+
+    # go through the lines and make the sensor associations
+    sensors_information = dict()
+    for sensor, information in zip(file_lines[0::2], file_lines[1::2]):
+
+        # get the sensor name
+        sensor = sensor.strip()
+
+        # parse the sensor information
+        information = information.strip().split(',')
+
+        # check whether we find the room id in the information of the lines
+        if len(information) > 4 and information[4].startswith('room-id'):
+
+            # split the original room information
+            name = information[3].split(":")
+            identifier = information[4].split(":")
+
+            # make some assertions that need to be true to create a fitting sensor name
+            assert len(name) == 3 and name[2] == 'c', \
+                f'For sensor {sensor} we have an unexpected room name: {information[3]}.'
+            assert len(identifier) == 3 and identifier[2] == 'v', \
+                f'For sensor {sensor} we have an unexpected room identifier: {information[4]}.'
+
+            # create a unique room name from the information
+            name = f'{name[1]}|{identifier[1]}'
+            sensors_information[sensor] = name
+    return sensors_information
+
+
+def load_soda(path: str, sensor_count: int = 3, sample_rate: str = '1min'):
+
+    # read in the ground truth information
+    ground_truth = read_soda_ground_truth(os.path.join(path, "SODA-GROUND-TRUTH"))
+
+    # go through all csv files
+    room_sensors = collections.defaultdict(dict)
+    for path in tqdm(glob(os.path.join(path, '*.csv')), desc='Load SODA'):
+
+        # check whether the file is not from VAV or TMR as they are also excluded in the original data
+        # paper:
+        # https://github.com/MingzheWu418/Joint-Training/blob/79f112114d182738444ddebbf23c4a14250d0eb4/colocation/Data.py#L224
+        file_name = os.path.split(os.path.splitext(path)[0])[-1]
+        if file_name.endswith("VAV") or file_name.endswith("TMR"):
+            continue
+
+        # check whether we have room information for the sensor
+        if file_name not in ground_truth:
+            continue
+
+        # replace the underscores with minus
+        sensor_type = file_name.split('_')[-1]
+
+        # read the data
+        data = pd.read_csv(path, index_col=0, header=None, names=["value"])
+        data.index = pd.to_datetime(data.index, unit='s')
+        data.index.name = 'datetime'
+
+        # get the room id
+        room_id = ground_truth[file_name]
+
+        # append the sensor to the dict
+        assert sensor_type not in room_sensors[room_id], 'Something is off. We have multiple similar sensors per room.'
+        room_sensors[room_id][sensor_type] = data
+
+    # only keep rooms with corresponding sensor number
+    room_sensors = {room: information for room, information in room_sensors.items()
+                    if len(information) == sensor_count}
+
+    # check if all the rooms have the same sensors
+    # HERE IS SOMETHING ODD as we have {('AGN', 'ARS', 'ART'): 35, ('AGN', 'ARS', 'ASO'): 1, ('ARS', 'ART', 'S'): 1}
+    # but the rooms and sensors we collected are the same as when using the original implementation, so we do not
+    # alternate this further.
+    sensors = collections.Counter(tuple(sorted(sensors.keys())) for sensors in room_sensors.values())
+
+    # convert the index into time stamps
+    start_timestamp = pd.to_datetime(0, unit='s')
+    end_timestamp = pd.to_datetime(0, unit='s')
+    for sensor_dict in room_sensors.values():
+        for df in sensor_dict.values():
+            start_timestamp = max(start_timestamp, df.index.min())
+            end_timestamp = max(end_timestamp, df.index.max())
+    # convert the maximum timestamps
+    start_timestamp = pd.to_datetime(start_timestamp, unit='s').ceil(sample_rate)
+    end_timestamp = pd.to_datetime(end_timestamp, unit='s').floor(sample_rate)
+
+    # make the wrapper for the tqdm progress bar
+    wrapper = functools.partial(tqdm, desc=f'Resampling Data', total=len(room_sensors))
+
+    # make a function we can work with for resampling
+    resampler = functools.partial(aggregate_room, start_date=start_timestamp, end_date=end_timestamp,
+                                  sample_rate=sample_rate)
+    with mp.Pool(mp.cpu_count() // 2) as pool:
+        data = {room: room_data for room, room_data in wrapper(pool.imap_unordered(resampler, room_sensors.items()))}
+
+    # check that all sensors have the same length
+    length = set(df.shape[0] for room in tqdm(data.values(), desc='Check length') for df in room.values())
+    start = set((df.index.min(), df.index.max()) for room in tqdm(data.values(), desc='Check index')
+                for df in room.values())
+    assert len(length) == 1, 'Length is different for some values.'
+    assert len(start) == 1, 'Index is different for some values.'
+    length = length.pop()
+    start = start.pop()
+
+    # combine into one dataframe
+    reformated = []
+    for room, room_data in tqdm(data.items(), desc='Rename and Reformat'):
+        for sensor, df in room_data.items():
+            df = df.rename(columns={'value': f'{room}_{sensor}'})
+            reformated.append(df)
+
+    # put into one dataframe
+    df = pd.concat(reformated, axis=1)
+
+    # check whether there are any NaN
+    assert not df.isna().any(axis=1).any(), 'There are NaN values.'
+
+    # make information print
+    print(f'Loaded and resampled all with sampling rate {sample_rate} signals from {start} with length {length}.')
+    return df, length, start
+
+
+if __name__ == '__main__':
+    load_soda(r"C:\Users\Lucas\Data\Soda")
