@@ -46,5 +46,6 @@ if __name__ == '__main__':
     _parser = argparse.ArgumentParser()
     _parser.add_argument('-p', '--path', type=str, default=r"C:\Users\Lucas\Data")
     _parser.add_argument('-d', '--dataset', type=str, required=True)
+    _parser.add_argument('-s', '--subset', type=str, default='fast')
     _args = _parser.parse_args()
-    main(_args.path, _args.dataset)
+    main(_args.path, _args.dataset, _args.subset)
