@@ -216,20 +216,21 @@ def read_soda_ground_truth(path: str):
     return sensors_information
 
 
-def load_soda(path: str, sensor_count: int = 3, sample_rate: str = '1min'):
+def load_soda(path: str, sample_rate: str, sensor_count: int = 3):
 
     # read in the ground truth information
     ground_truth = read_soda_ground_truth(os.path.join(path, "SODA-GROUND-TRUTH"))
+
+    # set not allowed sensors (that have std of zero in almost all cases)
+    not_allowed = ["TMR", "AGN", "ARS", "ASO", "_S"]
 
     # go through all csv files
     room_sensors = collections.defaultdict(dict)
     for path in tqdm(glob(os.path.join(path, '*.csv')), desc='Load SODA'):
 
-        # check whether the file is not from VAV or TMR as they are also excluded in the original data
-        # paper:
-        # https://github.com/MingzheWu418/Joint-Training/blob/79f112114d182738444ddebbf23c4a14250d0eb4/colocation/Data.py#L224
+        # check whether the file is not from excluded sensors
         file_name = os.path.split(os.path.splitext(path)[0])[-1]
-        if file_name.endswith("VAV") or file_name.endswith("TMR"):
+        if any(file_name.endswith(na) for na in not_allowed):
             continue
 
         # check whether we have room information for the sensor
@@ -309,4 +310,5 @@ def load_soda(path: str, sensor_count: int = 3, sample_rate: str = '1min'):
 
 
 if __name__ == '__main__':
-    load_soda(r"C:\Users\Lucas\Data\Soda")
+    load_soda(r"C:\Users\Lucas\Data\Soda", '1min')
+    load_keti(r"C:\Users\Lucas\Data\KETI", '1min')
