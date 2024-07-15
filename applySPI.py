@@ -27,6 +27,7 @@ def main(path: str, dataset_name: str = 'keti', subset: str = 'fast'):
     rooms = {key.split('_')[0] for key in std[std <= 1e-10].index.tolist()}
     print(f'Delete {len(rooms)}/{len(set(col.split("_")[0] for col in dataset.columns))} rooms due to zero std.')
     dataset = dataset.loc[:, [column for column in dataset.columns if column.split('_')[0] not in rooms]]
+    print(f'For data set {dataset_name}, we have {dataset.shape[1]} signals after deletion.')
 
     # set up the calculation of dependency measures
     tt = time.perf_counter()

@@ -211,7 +211,7 @@ def read_soda_ground_truth(path: str):
                 f'For sensor {sensor} we have an unexpected room identifier: {information[4]}.'
 
             # create a unique room name from the information
-            name = f'{name[1]}|{identifier[1]}'
+            name = f'{name[1].replace("_", "-")}|{identifier[1].replace("_", "-")}'
             sensors_information[sensor] = name
     return sensors_information
 
@@ -254,12 +254,9 @@ def load_soda(path: str, sample_rate: str, sensor_count: int = 3):
 
     # only keep rooms with corresponding sensor number
     room_sensors = {room: information for room, information in room_sensors.items()
-                    if len(information) == sensor_count}
+                    if len(information) >= sensor_count}
 
     # check if all the rooms have the same sensors
-    # HERE IS SOMETHING ODD as we have {('AGN', 'ARS', 'ART'): 35, ('AGN', 'ARS', 'ASO'): 1, ('ARS', 'ART', 'S'): 1}
-    # but the rooms and sensors we collected are the same as when using the original implementation, so we do not
-    # alternate this further.
     sensors = collections.Counter(tuple(sorted(sensors.keys())) for sensors in room_sensors.values())
 
     # convert the index into time stamps
