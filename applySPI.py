@@ -10,15 +10,15 @@ from sklearn.preprocessing import StandardScaler
 import dill
 
 
-def main(path: str, dataset: str = 'keti', subset: str = 'fast'):
+def main(path: str, dataset_name: str = 'keti', subset: str = 'fast'):
     # get the dataset
-    if dataset == 'keti':
+    if dataset_name == 'keti':
         dataset, _, _ = ld.load_keti(os.path.join(path, 'KETI'), sample_rate='1min')
-    elif dataset == 'soda':
+    elif dataset_name == 'soda':
         dataset, _, _ = ld.load_soda(os.path.join(path, 'Soda'), sample_rate='1min')
     else:
         raise ValueError('Did not recognize the specified dataset.')
-    print(f'From data set {dataset}, we have {dataset.shape[1]} signals with {dataset.shape[0]} samples per signal.')
+    print(f'For data set {dataset_name}, we have {dataset.shape[1]} signals with {dataset.shape[0]} samples/signal.')
 
     # get rid of rooms that have constant signals
     std = dataset.std()
