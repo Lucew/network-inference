@@ -8,6 +8,8 @@ import subprocess
 import multiprocessing as mp
 import loadData as ld
 import yaml
+from yaml.representer import Representer
+from yaml.dumper import Dumper
 import argparse
 import time
 import functools
@@ -69,8 +71,25 @@ def iterate_config(config_path: str):
                 yield keep_dict
             else:
                 for config in spi_configs:
-                    keep_dict['configs'] = config
+                    # this needs to be a list otherwise it will fail!
+                    keep_dict['configs'] = [config]
                     yield {spi_type: {spi_name: keep_dict}}
+
+
+class BlankNone(Representer):
+    """
+    Print None as blank into yaml when used as context manager
+    https://stackoverflow.com/a/67524482
+    """
+    def represent_none(self, *_):
+        return self.represent_scalar(u'tag:yaml.org,2002:null', u'')
+
+    def __enter__(self):
+        self.prior = Dumper.yaml_representers[type(None)]
+        yaml.add_representer(type(None), self.represent_none)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        Dumper.yaml_representers[type(None)] = self.prior
 
 
 def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, workers: int = None):
@@ -103,7 +122,7 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
 
         # save the new config
         config_path = os.path.join(result_path, 'config.yaml')
-        with open(config_path, 'w') as filet:
+        with BlankNone(), open(config_path, 'w') as filet:
             yaml.dump(config, filet, default_flow_style=False)
         config_paths.append((result_path, config_path))
 
