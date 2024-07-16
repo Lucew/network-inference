@@ -66,7 +66,7 @@ def iterate_config(config_path: str):
                     yield {spi_type: {spi_name: keep_dict}}
 
 
-def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int = None):
+def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, workers: int = None):
 
     # get the dataset
     dataset_name = dataset_name.lower()
@@ -102,7 +102,9 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int = None
 
     # now make the multiprocessing over all the metrics
     spi_computing = functools.partial(run_calculator, parquet_path=parquet_path, timeout_s=timeout_s)
-    with mp.Pool(mp.cpu_count()//2) as pool:
+    if workers is None:
+        workers = mp.cpu_count()//2
+    with mp.Pool(workers) as pool:
 
         # do this to have a progress bar
         result_iterator = tqdm(pool.imap_unordered(spi_computing, config_paths),
@@ -117,5 +119,6 @@ if __name__ == '__main__':
     _parser.add_argument('-d', '--dataset', type=str, default='keti')
     _parser.add_argument('-s', '--sampling_rate', type=str, default='1min')
     _parser.add_argument('-t', '--timeout_s', type=int, default=10)
+    _parser.add_argument('-w', '--workers', type=int, default=None)
     _args = _parser.parse_args()
-    main(_args.path, _args.dataset, _args.sampling_rate, _args.timeout_s)
+    main(_args.path, _args.dataset, _args.sampling_rate, _args.timeout_s, _args.workers)
