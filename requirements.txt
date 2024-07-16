@@ -5,3 +5,4 @@ pandas
 dill
 scikit-learn
 tqdm
+pyyaml
