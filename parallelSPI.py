@@ -147,7 +147,7 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
         raise ValueError(f'We can not use more workers than cores. You defined [{workers}], we have {mp.cpu_count()}.')
 
     # calculate the approximate duration of the computation with timeouts for perfect parallelization
-    estimated_duration = seconds2str(timeout_s * len(config_paths) / workers)
+    estimated_duration = seconds2str(int(timeout_s * len(config_paths) / workers))
     print(f'With perfect parallelization the estimated duration for is: {estimated_duration}')
 
     # now make the multiprocessing over all the metrics
