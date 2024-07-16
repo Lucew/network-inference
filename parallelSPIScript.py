@@ -24,9 +24,6 @@ def main(parquet_path: str, save_path: str, subset: str):
 
     # set up the calculation of dependency measures
     tt = time.perf_counter()
-    allowed_subsets = ['fast', 'all', 'sonnet', 'fabfour']
-    if subset not in allowed_subsets:
-        raise ValueError(f'Subset {subset} not allowed. Only {allowed_subsets} supported.')
     calc = Calculator(dataset=dataset.to_numpy().T, subset=subset)
 
     # get the results
