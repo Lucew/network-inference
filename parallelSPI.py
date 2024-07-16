@@ -134,7 +134,7 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
 
         # do this to have a progress bar
         result_iterator = tqdm(pool.imap_unordered(spi_computing, config_paths),
-                               desc='Computing SPIs', total=len(config_paths))
+                               desc=f'Computing SPIs ({timeout_s} s)', total=len(config_paths))
         for _ in result_iterator:
             pass
 
