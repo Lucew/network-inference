@@ -24,7 +24,8 @@ def run_calculator(input_tuple: tuple[str, str], parquet_path: str, timeout_s: i
         raise EnvironmentError('This program can only be run on linux machines!')
 
     # create the command we want to run
-    cmd = ['python', 'parallelSPIScript', '--parquet_path', parquet_path, '--save_path', save_path, '--subset', subset]
+    cmd = ['python', 'parallelSPIScript.py',
+           '--parquet_path', parquet_path, '--save_path', save_path, '--subset', subset]
 
     # create the file we want to write the output in
     filet = open(os.path.join(save_path, 'output_file'), 'w')
