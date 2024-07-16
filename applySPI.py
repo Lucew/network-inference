@@ -8,7 +8,6 @@ import time
 import numpy
 from sklearn.preprocessing import StandardScaler
 import dill
-from scipy.stats import zscore
 
 
 def main(path: str, dataset_name: str = 'keti', subset: str = 'fast'):
@@ -19,7 +18,7 @@ def main(path: str, dataset_name: str = 'keti', subset: str = 'fast'):
     elif dataset_name == 'soda':
         dataset, _, _ = ld.load_soda(os.path.join(path, 'Soda'), sample_rate='1min', sensor_count=2)
     else:
-        raise ValueError('Did not recognize the specified dataset.')
+        raise ValueError(f'Did not recognize the specified dataset: [{dataset_name}].')
     print(f'For data set {dataset_name}, we have {dataset.shape[1]} signals with {dataset.shape[0]} samples/signal.')
 
     # get rid of rooms that have constant signals
