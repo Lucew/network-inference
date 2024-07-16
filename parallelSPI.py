@@ -92,6 +92,20 @@ class BlankNone(Representer):
         Dumper.yaml_representers[type(None)] = self.prior
 
 
+def seconds2str(n: int):
+
+    # get the days first
+    days, n = divmod(n, 24 * 3600)
+
+    # then compute the hours
+    hours, n = divmod(n, 3600)
+
+    # get the minutes and seconds
+    minutes, seconds = divmod(n, 60)
+
+    return f"{days} days, {hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
 def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, workers: int = None):
 
     # get the dataset
@@ -126,10 +140,18 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
             yaml.dump(config, filet, default_flow_style=False)
         config_paths.append((result_path, config_path))
 
-    # now make the multiprocessing over all the metrics
-    spi_computing = functools.partial(run_calculator, parquet_path=parquet_path, timeout_s=timeout_s)
+    # set the number of workers
     if workers is None:
         workers = mp.cpu_count()//2
+    if workers > mp.cpu_count:
+        raise ValueError(f'We can not use more workers than cores. You defined [{workers}], we have {mp.cpu_count()}.')
+
+    # calculate the approximate duration of the computation with timeouts for perfect parallelization
+    estimated_duration = seconds2str(timeout_s * len(config_paths) / workers)
+    print(f'With perfect parallelization the estimated duration for is: {estimated_duration}')
+
+    # now make the multiprocessing over all the metrics
+    spi_computing = functools.partial(run_calculator, parquet_path=parquet_path, timeout_s=timeout_s)
     with mp.Pool(workers) as pool:
 
         # do this to have a progress bar
