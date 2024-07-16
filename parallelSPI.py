@@ -12,6 +12,7 @@ import argparse
 import time
 import functools
 from tqdm import tqdm
+import psutil
 
 
 def run_calculator(input_tuple: tuple[str, str], parquet_path: str, timeout_s: int):
@@ -30,16 +31,21 @@ def run_calculator(input_tuple: tuple[str, str], parquet_path: str, timeout_s: i
     # create the file we want to write the output in
     filet = open(os.path.join(save_path, 'output_file'), 'w')
 
-    # start running the process and put a timeout on it
-    try:
-        p = subprocess.Popen(cmd, start_new_session=True, stderr=filet, stdout=filet)
-        p.wait(timeout=timeout_s)
+    # start running the process
+    proc = subprocess.Popen(cmd, start_new_session=True, stderr=filet, stdout=filet)
 
-    # check whether we reached a timeout and kill the process
+    # put a timeout on the process
+    try:
+        proc.wait(timeout=timeout_s)
+    # check whether we reached a timeout and kill the process with all its children
     except subprocess.TimeoutExpired:
         print(f'\n\n\nTimeout for {cmd} ({timeout_s}s) expired', file=filet)
         print('Terminating the whole process group...', file=filet)
-        os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+
+        # https://gist.github.com/jizhilong/6687481?permalink_comment_id=3057122#gistcomment-3057122
+        for child in psutil.Process(proc.pid).children(recursive=True):
+            child.kill()
+        proc.kill()
     finally:
         filet.close()
 
