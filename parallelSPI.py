@@ -143,7 +143,7 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
     # set the number of workers
     if workers is None:
         workers = mp.cpu_count()//2
-    if workers > mp.cpu_count:
+    if workers > mp.cpu_count():
         raise ValueError(f'We can not use more workers than cores. You defined [{workers}], we have {mp.cpu_count()}.')
 
     # calculate the approximate duration of the computation with timeouts for perfect parallelization
