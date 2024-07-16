@@ -24,7 +24,7 @@ def main(parquet_path: str, save_path: str, subset: str):
 
     # set up the calculation of dependency measures
     tt = time.perf_counter()
-    calc = Calculator(dataset=dataset.to_numpy().T, subset=subset)
+    calc = Calculator(dataset=dataset.to_numpy().T, configfile=subset)
 
     # get the results
     calc.compute()

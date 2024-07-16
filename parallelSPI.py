@@ -79,13 +79,13 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
         raise ValueError(f'Did not recognize the specified dataset: [{dataset_name}].')
     print(f'For data set {dataset_name}, we have {dataset.shape[1]} signals with {dataset.shape[0]} samples/signal.')
 
-    # save the dataset into the current working directory
-    parquet_path = f'{dataset_name}.parquet'
-    dataset.to_parquet(parquet_path)
-
     # make a folder for the current run
     curr_path = f'spi_{int(time.time())}'
     os.mkdir(curr_path)
+
+    # save the dataset into the current working directory
+    parquet_path = os.path.join(curr_path, f'{dataset_name}.parquet')
+    dataset.to_parquet(parquet_path)
 
     # flatten the config into a list of things to do and create the corresponding folders
     config_paths = []
