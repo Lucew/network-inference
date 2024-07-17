@@ -125,14 +125,6 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
     curr_path = f'spi_{int(time.time())}'
     os.mkdir(curr_path)
 
-    # save the configuration in there
-    with open(os.path.join(curr_path, 'config.txt'), 'w') as filet:
-        filet.write(f'path: {path}\n'
-                    f'dataset_name: {dataset_name}\n'
-                    f'sampling_rate: {sampling_rate}\n'
-                    f'timeout_s: {timeout_s}\n'
-                    f'workers: {workers}')
-
     # save the dataset into the current working directory
     parquet_path = os.path.join(curr_path, f'{dataset_name}.parquet')
     dataset.to_parquet(parquet_path)
@@ -157,6 +149,18 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
     if workers > mp.cpu_count():
         raise ValueError(f'We can not use more workers than cores. You defined [{workers}], we have {mp.cpu_count()}.')
 
+    # set the time for the dataset if not specified, here we allow 100ms per comparison
+    if timeout_s is None:
+        timeout_s = int(dataset.shape[1]*dataset.shape[1]*0.1)
+
+    # save the configuration in there
+    with open(os.path.join(curr_path, 'config.txt'), 'w') as filet:
+        filet.write(f'path: {path}\n'
+                    f'dataset_name: {dataset_name}\n'
+                    f'sampling_rate: {sampling_rate}\n'
+                    f'timeout_s: {timeout_s}\n'
+                    f'workers: {workers}')
+
     # calculate the approximate duration of the computation with timeouts for perfect parallelization
     estimated_duration = seconds2str(int(timeout_s * len(config_paths) / workers))
     print(f'With perfect parallelization the estimated duration for is: {estimated_duration}')
@@ -167,7 +171,7 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
 
         # do this to have a progress bar
         result_iterator = tqdm(pool.imap_unordered(spi_computing, config_paths),
-                               desc=f'Computing SPIs ({timeout_s} s)', total=len(config_paths))
+                               desc=f'Computing SPIs ({seconds2str(timeout_s)})', total=len(config_paths))
         for _ in result_iterator:
             pass
 
@@ -177,7 +181,7 @@ if __name__ == '__main__':
     _parser.add_argument('-p', '--path', type=str, default=r"C:\Users\Lucas\Data")
     _parser.add_argument('-d', '--dataset', type=str, default='keti')
     _parser.add_argument('-s', '--sampling_rate', type=str, default='1min')
-    _parser.add_argument('-t', '--timeout_s', type=int, default=10)
+    _parser.add_argument('-t', '--timeout_s', type=int, default=None)
     _parser.add_argument('-w', '--workers', type=int, default=None)
     _args = _parser.parse_args()
     main(_args.path, _args.dataset, _args.sampling_rate, _args.timeout_s, _args.workers)
