@@ -31,7 +31,7 @@ def main(parquet_path: str, save_path: str, subset: str):
     print('Computation took', time.perf_counter()-tt, 'Seconds')
 
     # drop the dataset so the saved results get smaller
-    calc._data = None
+    calc._dataset = None
 
     # save the calculator object as a .pkl
     with open(os.path.join(save_path, 'saved_calculator.pkl'), 'wb') as f:
