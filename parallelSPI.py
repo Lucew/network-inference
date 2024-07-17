@@ -7,6 +7,7 @@ import signal
 import subprocess
 import multiprocessing as mp
 import loadData as ld
+import loadRotaryMachines as ldr
 import yaml
 from yaml.representer import Representer
 from yaml.dumper import Dumper
@@ -114,6 +115,8 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
         dataset, _, _ = ld.load_keti(os.path.join(path, 'KETI'), sample_rate=sampling_rate)
     elif dataset_name == 'soda':
         dataset, _, _ = ld.load_soda(os.path.join(path, 'Soda'), sample_rate=sampling_rate, sensor_count=2)
+    elif dataset_name == 'rotary':
+        dataset, _, _ = ldr.load_rotary(os.path.join(path, 'Rotary'), sample_rate=sampling_rate)
     else:
         raise ValueError(f'Did not recognize the specified dataset: [{dataset_name}].')
     print(f'For data set {dataset_name}, we have {dataset.shape[1]} signals with {dataset.shape[0]} samples/signal.')
@@ -121,6 +124,14 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
     # make a folder for the current run
     curr_path = f'spi_{int(time.time())}'
     os.mkdir(curr_path)
+
+    # save the configuration in there
+    with open(os.path.join(curr_path, 'config.txt'), 'w') as filet:
+        filet.write(f'path: {path}\n'
+                    f'dataset_name: {dataset_name}\n'
+                    f'sampling_rate: {sampling_rate}\n'
+                    f'timeout_s: {timeout_s}\n'
+                    f'workers: {workers}')
 
     # save the dataset into the current working directory
     parquet_path = os.path.join(curr_path, f'{dataset_name}.parquet')
