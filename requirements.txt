@@ -6,3 +6,4 @@ dill
 scikit-learn
 tqdm
 pyyaml
+psutil
