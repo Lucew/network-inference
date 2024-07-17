@@ -121,6 +121,13 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
         raise ValueError(f'Did not recognize the specified dataset: [{dataset_name}].')
     print(f'For data set {dataset_name}, we have {dataset.shape[1]} signals with {dataset.shape[0]} samples/signal.')
 
+    # get rid of rooms that have constant signals
+    std = dataset.std()
+    rooms = {key.split('_')[0] for key in std[std <= 1e-10].index.tolist()}
+    print(f'Delete {len(rooms)}/{len(set(col.split("_")[0] for col in dataset.columns))} rooms due to zero std.')
+    dataset = dataset.loc[:, [column for column in dataset.columns if column.split('_')[0] not in rooms]]
+    print(f'We have {dataset.shape[1]} signals after deletion.')
+
     # make a folder for the current run
     curr_path = f'spi_{int(time.time())}'
     os.mkdir(curr_path)
