@@ -25,7 +25,7 @@ def prepare_rotary_data(path: str):
     df.loc[3433369, "TIMESTAMP"] = f'{df.loc[3433369, "TIMESTAMP"]}.000000'
 
     # filter the machines whose data is clean and complete
-    with open(r"C:\Users\Lucas\Data\RotaryMachines\allowed_machines.txt", 'r') as filet:
+    with open(os.path.join(path, "allowed_machines.txt"), 'r') as filet:
         allowed_machines = {int(ele) for ele in filet.readlines()}
     df = df.loc[df['mcmachine'].isin(allowed_machines), :]
 
@@ -73,7 +73,7 @@ def separate_rotary_data(path: str):
     for idx, machine in enumerate(flat_df['mcmachine'].unique()):
 
         # make a directory for the machine
-        dir_path = os.path.join(result_path, f'machine_{idx}')
+        dir_path = os.path.join(result_path, f'machine-{idx}')
         os.mkdir(dir_path)
 
         # go through the signals

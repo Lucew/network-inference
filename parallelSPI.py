@@ -193,6 +193,8 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
             proc = psutil.Process(os.getpid())
             for child in proc.children(recursive=True):
                 child.kill()
+
+            # reraise the keyboard interrupt
             raise er
 
 
