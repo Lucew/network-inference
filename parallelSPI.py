@@ -38,7 +38,7 @@ def run_calculator(input_tuple: tuple[str, str], parquet_path: str, timeout_s: i
     proc = subprocess.Popen(cmd, start_new_session=True, stderr=filet, stdout=filet)
 
     # write the process id to the current path
-    with open(f'pid', 'w') as filet:
+    with open(os.path.join(save_path, 'pid'), 'w') as filet:
         filet.write(str(proc.pid))
 
     # put a timeout on the process
