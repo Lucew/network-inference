@@ -41,14 +41,18 @@ def run_calculator(input_tuple: tuple[str, str], parquet_path: str, timeout_s: i
     try:
         proc.wait(timeout=timeout_s)
     # check whether we reached a timeout and kill the process with all its children
-    except subprocess.TimeoutExpired:
-        print(f'\n\n\nTimeout for {cmd} ({timeout_s}s) expired', file=filet)
+    except (subprocess.TimeoutExpired, KeyboardInterrupt) as er:
+        if isinstance(er, subprocess.TimeoutExpired):
+            print(f'\n\n\nTimeout for {cmd} ({timeout_s}s) expired', file=filet)
+        else:
+            print(f'\n\n\n user terminated the main process.')
         print('Terminating the whole process group...', file=filet)
 
         # https://gist.github.com/jizhilong/6687481?permalink_comment_id=3057122#gistcomment-3057122
         for child in psutil.Process(proc.pid).children(recursive=True):
             child.kill()
         proc.kill()
+
     finally:
         filet.close()
 
