@@ -189,10 +189,10 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
                 pass
         except KeyboardInterrupt as er:
 
-            # get the currently running process and all its children
+            # get the currently running process and kill all its children
             proc = psutil.Process(os.getpid())
             for child in proc.children(recursive=True):
-                print(child.cmdline())
+                child.kill()
             raise er
 
 
