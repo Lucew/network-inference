@@ -194,8 +194,8 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
         except KeyboardInterrupt:
 
             # go through all the folders in the save path and find the pids
-            pids = [int(open(os.path.join(ele, 'pid')).read())
-                    for ele in os.listdir(curr_path) if os.path.isfile(os.path.join(ele, 'pid'))]
+            pids = [int(open(os.path.join(curr_path, ele, 'pid')).read())
+                    for ele in os.listdir(curr_path) if os.path.isfile(os.path.join(curr_path, ele, 'pid'))]
 
             # go through all the processes
             for pid in pids:
