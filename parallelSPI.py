@@ -191,7 +191,7 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
                                    desc=f'Computing SPIs ({seconds2str(timeout_s)})', total=len(config_paths))
             for _ in result_iterator:
                 pass
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as er:
 
             # go through all the folders in the save path and find the pids
             pids = [int(open(os.path.join(curr_path, ele, 'pid')).read())
@@ -208,7 +208,13 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
                     continue
 
                 # check whether it has the expected name
-                print(proc.name())
+                if proc.cmdline()[0] == 'python' and proc.cmdline()[1] == 'parallelSPIScript.py':
+                    # https://gist.github.com/jizhilong/6687481?permalink_comment_id=3057122#gistcomment-3057122
+                    for child in proc.children(recursive=True):
+                        child.kill()
+                    proc.kill()
+                    print(f'Killed process {pid}.')
+            raise er
 
 
 if __name__ == '__main__':
