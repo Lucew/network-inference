@@ -204,6 +204,7 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
                 try:
                     proc = psutil.Process(pid)
                 except psutil.NoSuchProcess:
+                    print(f'Process {pid} already terminated.')
                     continue
 
                 # check whether it has the expected name
