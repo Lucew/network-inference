@@ -4,7 +4,7 @@ from glob import glob
 from tqdm import tqdm
 import functools
 import multiprocessing as mp
-import loadData as ld
+import loadBuildingData as ldb
 
 
 def prepare_rotary_data(path: str):
@@ -135,7 +135,7 @@ def load_rotary(path: str, sample_rate: str):
     wrapper = functools.partial(tqdm, desc=f'Resampling Data', total=len(data))
 
     # make a function we can work with for resampling
-    resampler = functools.partial(ld.aggregate_room, start_date=start_timestamp, end_date=end_timestamp,
+    resampler = functools.partial(ldb.aggregate_room, start_date=start_timestamp, end_date=end_timestamp,
                                   sample_rate=sample_rate)
     with mp.Pool(mp.cpu_count() // 2) as pool:
         data = {room: room_data for room, room_data in wrapper(pool.imap_unordered(resampler, data.items()))}
