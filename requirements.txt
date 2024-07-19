@@ -3,7 +3,7 @@ numpy
 pyarrow
 pandas
 scikit-learn
-pyspi
+pyspi==1.1.0
 
 # administrative libraries
 dill
