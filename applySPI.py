@@ -3,7 +3,7 @@ import os.path
 
 import numpy as np
 from pyspi.calculator import Calculator
-import loadData as ld
+import loadBuildingData as ldb
 import time
 import numpy
 from sklearn.preprocessing import StandardScaler
@@ -14,9 +14,9 @@ def main(path: str, dataset_name: str = 'keti', subset: str = 'fast'):
     # get the dataset
     dataset_name = dataset_name.lower()
     if dataset_name == 'keti':
-        dataset, _, _ = ld.load_keti(os.path.join(path, 'KETI'), sample_rate='1min')
+        dataset, _, _ = ldb.load_keti(os.path.join(path, 'KETI'), sample_rate='1min')
     elif dataset_name == 'soda':
-        dataset, _, _ = ld.load_soda(os.path.join(path, 'Soda'), sample_rate='1min', sensor_count=2)
+        dataset, _, _ = ldb.load_soda(os.path.join(path, 'Soda'), sample_rate='1min', sensor_count=2)
     else:
         raise ValueError(f'Did not recognize the specified dataset: [{dataset_name}].')
     print(f'For data set {dataset_name}, we have {dataset.shape[1]} signals with {dataset.shape[0]} samples/signal.')

@@ -6,7 +6,7 @@ import os
 import signal
 import subprocess
 import multiprocessing as mp
-import loadData as ld
+import loadBuildingData as ldb
 import loadRotaryMachines as ldr
 import yaml
 from yaml.representer import Representer
@@ -116,9 +116,9 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
     # get the dataset
     dataset_name = dataset_name.lower()
     if dataset_name == 'keti':
-        dataset, _, _ = ld.load_keti(os.path.join(path, 'KETI'), sample_rate=sampling_rate)
+        dataset, _, _ = ldb.load_keti(os.path.join(path, 'KETI'), sample_rate=sampling_rate)
     elif dataset_name == 'soda':
-        dataset, _, _ = ld.load_soda(os.path.join(path, 'Soda'), sample_rate=sampling_rate, sensor_count=2)
+        dataset, _, _ = ldb.load_soda(os.path.join(path, 'Soda'), sample_rate=sampling_rate, sensor_count=2)
     elif dataset_name == 'rotary':
         dataset, _, _ = ldr.load_rotary(os.path.join(path, 'Rotary'), sample_rate=sampling_rate)
     else:
