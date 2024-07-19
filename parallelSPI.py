@@ -122,8 +122,8 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
         dataset, _, _ = ldb.load_soda(os.path.join(path, 'Soda'), sample_rate=sampling_rate, sensor_count=2)
     elif dataset_name == 'rotary':
         dataset, _, _ = ldr.load_rotary(os.path.join(path, 'Rotary'), sample_rate=sampling_rate)
-    elif dataset_name.startswith('Plant_@') and dataset_name[-1] in {str(ele) for ele in range(1, 5)}:
-        dataset, _, _ = ldp.load_plant(os.path.join(path, dataset_name), sample_rate=sampling_rate)
+    elif dataset_name.startswith('plant_@') and dataset_name[-1] in {str(ele) for ele in range(1, 5)}:
+        dataset, _, _ = ldp.load_plant(os.path.join(path, dataset_name.capitalize()), sample_rate=sampling_rate)
     else:
         raise ValueError(f'Did not recognize the specified dataset: [{dataset_name}].')
     print(f'For data set {dataset_name}, we have {dataset.shape[1]} signals with {dataset.shape[0]} samples/signal.')
