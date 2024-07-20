@@ -109,7 +109,8 @@ def seconds2str(n: int):
     return f"{days} days, {hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
-def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, workers: int = None):
+def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, workers: int = None,
+         deselect_rooms: bool = True):
 
     # get the dataset
     dataset_name = dataset_name.lower()
@@ -127,9 +128,13 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
 
     # get rid of rooms that have constant signals
     std = dataset.std()
-    rooms = {key.split('_')[0] for key in std[std <= 1e-10].index.tolist()}
-    print(f'Delete {len(rooms)}/{len(set(col.split("_")[0] for col in dataset.columns))} rooms due to zero std.')
-    dataset = dataset.loc[:, [column for column in dataset.columns if column.split('_')[0] not in rooms]]
+    if deselect_rooms:
+        rooms = {key.split('_')[0] for key in std[std <= 1e-10].index.tolist()}
+        print(f'Delete {len(rooms)}/{len(set(col.split("_")[0] for col in dataset.columns))} rooms due to zero std.')
+        dataset = dataset.loc[:, [column for column in dataset.columns if column.split('_')[0] not in rooms]]
+    else:
+        columns = std[std >= 1e-10].index
+        print(f'Delete {len(dataset.columns)-len(columns)}/{len(dataset.columns)} signals due to zero std.')
     print(f'We have {dataset.shape[1]} signals after deletion.')
 
     # make a folder for the current run
@@ -170,7 +175,8 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
                     f'dataset_name: {dataset_name}\n'
                     f'sampling_rate: {sampling_rate}\n'
                     f'timeout_s: {timeout_s}\n'
-                    f'workers: {workers}')
+                    f'workers: {workers}\n'
+                    f'deselect rooms: {deselect_rooms}')
 
     # calculate the approximate duration of the computation with timeouts for perfect parallelization
     estimated_duration = seconds2str(int(timeout_s * len(config_paths) / workers))
@@ -198,6 +204,12 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
             raise er
 
 
+def check_bool(inputed: str):
+    if inputed.lower() not in ['true', 'false']:
+        raise ValueError(f'We only accept true/false you specified: [{inputed}].')
+    return inputed.lower() == 'true'
+
+
 if __name__ == '__main__':
     _parser = argparse.ArgumentParser()
     _parser.add_argument('-p', '--path', type=str, default=r"C:\Users\Lucas\Data")
@@ -205,5 +217,6 @@ if __name__ == '__main__':
     _parser.add_argument('-s', '--sampling_rate', type=str, default='1min')
     _parser.add_argument('-t', '--timeout_s', type=int, default=None)
     _parser.add_argument('-w', '--workers', type=int, default=None)
+    _parser.add_argument('-dr', '--delete_rooms', type=check_bool, default=True)
     _args = _parser.parse_args()
-    main(_args.path, _args.dataset, _args.sampling_rate, _args.timeout_s, _args.workers)
+    main(_args.path, _args.dataset, _args.sampling_rate, _args.timeout_s, _args.workers, _args.delete_rooms)
