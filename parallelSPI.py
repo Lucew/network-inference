@@ -135,6 +135,7 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
     else:
         columns = std[std >= 1e-10].index
         print(f'Delete {len(dataset.columns)-len(columns)}/{len(dataset.columns)} signals due to zero std.')
+        dataset = dataset[columns.tolist()]
     print(f'We have {dataset.shape[1]} signals after deletion.')
 
     # make a folder for the current run
