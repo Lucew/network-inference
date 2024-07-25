@@ -198,3 +198,9 @@ results/
 # ignore plots
 *.pgf
 *.svg
+
+# ignore the measurements
+measurements/
+
+# ignore the rotary stuff
+exploration/ExploreRotary.ipynb
