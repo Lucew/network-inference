@@ -1,0 +1,370 @@
+import os
+import sys
+import pandas as pd
+from glob import glob
+import pyspi
+from pyspi.calculator import Calculator
+import dill
+from tqdm import tqdm
+import numpy as np
+import multiprocessing as mp
+import functools
+
+from sklearn.metrics import roc_auc_score
+from sklearn.cluster import SpectralClustering
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score, adjusted_mutual_info_score, homogeneity_score, completeness_score, v_measure_score
+
+
+# https://stackoverflow.com/a/45669280
+class HiddenPrints:
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        sys.stdout = open(os.devnull, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout.close()
+        sys.stdout = self._original_stdout
+
+
+def find_and_load_results(result_path: str, original_dataset: pd.DataFrame):
+
+    # find all the folders in the directory
+    folders = glob(os.path.join(result_path, f'*{os.path.sep}'))
+
+    # Go through all the folders and check the output file if the process was terminated
+    # or successful. Additionally, load the pkl calculator if the process was not terminated
+    terminated = []
+    timing_dict = dict()
+    undefined = []
+    defined = []
+    for folder in folders:
+
+        # load the output file
+        with open(os.path.join(folder, 'output_file')) as filet:
+            output = filet.readlines()
+
+        # check the lines of the process was terminated
+        if any(line.startswith('Terminating the whole process group...') for line in output):
+            terminated.append(folder)
+            continue
+
+        # check the output whether it terminated
+        timing_lines = [line for line in output if line.startswith("Calculation complete. Time taken: ")]
+        assert len(timing_lines) <= 1, f'There is something off with the output of in: {folder}'
+
+        if len(timing_lines) == 0:
+            undefined.append(folder)
+            continue
+
+        # extract the timing
+        timing_lines = timing_lines.pop()
+        timing_lines = timing_lines.split(': ')[-1].replace("s", " ")
+        timing_lines = float(timing_lines)
+
+        # load the results into memory
+        with open(os.path.join(folder, 'saved_calculator.pkl'), 'rb') as f:
+            intermediate = dill.load(f)
+        defined.append(intermediate.table)
+
+        # find the name of the SPI
+        spi_name = set(intermediate.table.columns.get_level_values(0))
+        assert len(spi_name) == 1, f'In folder {folder} are multiple SPIs: {spi_name}.'
+        spi_name = spi_name.pop()
+        timing_dict[spi_name] = timing_lines
+
+    # make a debug print
+    print(f'From originally {len(folders)} found SPIs. {len(defined)} are defined {len(terminated)} were terminated '
+          f'and {len(undefined)} were undefined.')
+
+    # create one big table from all the results
+    result_df = pd.concat(defined, axis=1)
+
+    # rename the processes for every spi
+    result_df.index = original_dataset.columns
+    first_table = list(result_df.columns.get_level_values(0))[0]
+    result_df.rename(columns={level_two: col for (level_two, col) in zip(result_df[first_table].columns, original_dataset.columns)}, inplace=True)
+
+    # get the functional subsystems (rooms, machines, blocks, etc.)
+    rooms = {col.split('_')[0] for col in original_dataset.columns}
+    sensors = {col.split('_', 1)[1] for col in original_dataset.columns}
+
+    # get all the measures we want and that have only main diagonal NaN
+    measures = set(result_df.columns.get_level_values(0))
+    original_amount = len(measures)
+    measures = [table for table in measures
+                if result_df[table].shape[1] == result_df[table].isna().to_numpy().sum()
+                and not np.isinf(result_df[table].to_numpy()).any()]
+    result_df = result_df[measures]
+    print(f'We retained {len(measures)}/{original_amount} similarity measures (others were NaN or Inf).')
+
+    return result_df, measures, timing_dict, defined, terminated, undefined
+
+
+def compute_gross_accuracy(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame):
+
+    # produce the results
+    for table in tqdm(measures, desc='Going through measures'):
+        gross_accuracy = 0
+
+        # drop from the index, so we can't use it to compare
+        currtab = spi_df[table].copy()
+        results.loc[table, "gross accuracy"] = 0
+
+        # check whether we have too many nan values
+        if currtab.isna().to_numpy().sum() > currtab.shape[1]:
+            print(table, 'has NaN.')
+            continue
+
+        # go through the sensor and check the k closest
+        correct = 0
+        for element in currtab.columns:
+
+            # drop the own element
+            series = currtab[element].drop(index=element)
+
+            # go to the corresponding column and check the closest elements
+            closest = series.nlargest(1)
+
+            # check majority class and also the closest element
+            rooms = dict()
+            for index, content in closest.items():
+                room = index.split('_')[0]
+                if room not in rooms:
+                    rooms[room] = [1, content]
+                else:
+                    rooms[room][0] += 1
+                    rooms[room][1] = max(content, rooms[room][1])
+
+            # get the maximum element
+            max_ele = max(rooms.items(), key=lambda x: x[1])[0]
+            gross_accuracy += max_ele == element.split('_')[0]
+        results.loc[table, "gross accuracy"] = gross_accuracy / currtab.shape[1]
+
+
+def compute_median_rank(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame):
+
+    # produce the results
+    for table in tqdm(measures, desc='Going through measures'):
+
+        # get a copy of the results
+        currtab = spi_df[table].copy()
+
+        # go through all columns and check the rank of other sensors from the same room
+        ranks = 0
+        for col in currtab.columns:
+            # Extract the room number and type from the original string
+            room, type_to_exclude = col.split('_', 1)
+
+            # get the median rank of the sensors
+            median_rank = currtab[col].rank(ascending=False).filter(regex=rf'^{room}_(?!{type_to_exclude}$)').median()
+            ranks += median_rank
+        results.loc[table, "median rank"] = -ranks / len(currtab.columns)
+
+
+def compute_pairwise_auroc(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame):
+
+    # now we can also use auroc to for pairwise interactions
+    for table in tqdm(measures, desc='Going through measures'):
+
+        # get a copy of the results
+        currtab = spi_df[table].copy()
+
+        # make a copy to create the groundtruth
+        gt = currtab.copy()
+        gt.loc[:, :] = 0
+
+        # make a numpy array that shows the rooms
+        first_letters = [ele[0] for ele in gt.index.str.split('_')]
+
+        # go through the columns of the ground truth and place the ground truth
+        for col in gt.columns:
+            room = col.split('_')[0]
+            gt.loc[[ele == room for ele in first_letters], col] = 1
+
+        # Create a mask for the main diagonal
+        diagonal_mask = np.eye(currtab.shape[0], dtype=bool)
+
+        # Invert the mask to get the non-diagonal elements
+        non_diagonal_mask = ~diagonal_mask
+
+        # compute the roc_auc
+        roc_auc = roc_auc_score(gt.values[non_diagonal_mask], currtab.values[non_diagonal_mask])
+
+        # put in the auc score
+        results.loc[table, "pairwise auroc"] = roc_auc
+
+
+def compute_triplet_accuracy(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame, progress: bool = True):
+
+    # create a progress bar wrapper
+    if progress:
+        wrapper = functools.partial(tqdm, total=len(measures), desc='Going through measures')
+    else:
+        def wrapper(iterable):
+            for _idx in iterable:
+                yield _idx
+
+    # make the triplet accuracy
+    for table in wrapper(measures):
+        # get a copy of the results
+        currtab = spi_df[table].copy()
+
+        # go through all the different triplets and make accuracy
+        sensors = list(currtab.columns)
+
+        # get the rooms from the sensors
+        rooms = [ele.split('_', 1)[0] for ele in sensors]
+
+        # Make all the triplets and whether they are successful. This is the fastest implementation
+        # I could come up with. Remember: Never use loops in Python, especially when nested three times.
+        summed = 0
+        count = 0
+        for adx, anchor in enumerate(sensors):
+
+            # find the room of the anchor sensor
+            anchor_system = rooms[adx]
+
+            # get the positive samples values with the same room
+            positive = currtab.loc[currtab.index.str.startswith(anchor_system), [anchor]]
+            positive = positive.drop(anchor, axis=0, inplace=False)
+
+            # get all the negative samples
+            negative = currtab.loc[~currtab.index.str.startswith(anchor_system), [anchor]]
+
+            # make the cross-product of negative and positive samples
+            cross = positive.merge(negative, how='cross').to_numpy()
+            summed += np.sum(cross[:, 0] > cross[:, 1])
+            count = cross.shape[0]
+
+        # compute the triplet accuracy
+        results.loc[table, 'Triplet Accuracy'] = summed / count
+
+
+def compute_clustering(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame, num_clusters: int):
+
+    # now we can also use auroc to for pairwise interactions
+    for table in tqdm(measures, desc='Going through measures'):
+        # get a copy of the results
+        currtab = spi_df[table].copy()
+        currtab.loc[:, :] -= currtab.min().min()
+
+        # Compute the symmetric DataFrame by averaging with its transpose
+        currtab = (currtab + currtab.T) / 2
+
+        # fill the main diagonal of the dataframe
+        np.fill_diagonal(currtab.values, 1)
+
+        # make some clustering
+        clustering = SpectralClustering(n_clusters=num_clusters, affinity='precomputed')
+        predicted_labels = clustering.fit_predict(currtab)
+
+        # evaluate the clustering
+        gt = [col.split('_')[0] for col in currtab.columns]
+
+        ari_score = adjusted_rand_score(gt, predicted_labels)
+        results.loc[table, "Adjusted Rand Index"] = ari_score
+
+        nmi_score = normalized_mutual_info_score(gt, predicted_labels)
+        results.loc[table, "Normalized Mutual Information"] = nmi_score
+
+        ami_score = adjusted_mutual_info_score(gt, predicted_labels)
+        results.loc[table, "Adjusted Mutual Information"] = ami_score
+
+        homogeneity = homogeneity_score(gt, predicted_labels)
+        results.loc[table, "Homogeneity"] = homogeneity
+
+        completeness = completeness_score(gt, predicted_labels)
+        results.loc[table, "Completeness"] = completeness
+
+        v_measure = v_measure_score(gt, predicted_labels)
+        results.loc[table, "V-Measure"] = v_measure
+
+
+def compute_map(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame):
+    # Precision@n: https://link.springer.com/referenceworkentry/10.1007/978-0-387-39940-9_484
+    # AP: https://link.springer.com/referenceworkentry/10.1007/978-0-387-39940-9_482
+    # MAP: https://link.springer.com/referenceworkentry/10.1007/978-0-387-39940-9_492
+
+    # produce the results
+    for table in tqdm(measures, desc='Going through measures'):
+
+        # drop from the index, so we can't use it to compare
+        currtab = spi_df[table].copy()
+        ranked_currtab = currtab.rank(method='first', ascending=False)
+
+        # go through all the columns
+        average_precision_sum = 0
+        for col in ranked_currtab.columns:
+
+            # find the room that belongs to the current column
+            system = col.split('_', 1)[0]
+
+            # locate the correct positions
+            locator = [ele for ele in currtab.index if ele.startswith(system) and ele != col]
+
+            # compute the average precision by sorting the ranks of the interesting elements
+            # and then divide the number of retrieved elements by these ranks, build the sum and divide
+            # by the number of interesting elements as defined in the formula of average precision
+            sorted_ranks = np.sort((ranked_currtab.loc[locator, col].to_numpy()))
+            average_precision_sum += np.sum(np.array(range(1, len(locator)+1))/sorted_ranks)/len(locator)
+
+        results.loc[table, "Mean Average Precision"] = average_precision_sum/len(currtab.columns)
+
+
+def print_results(results: pd.DataFrame):
+
+    # print the results
+    for col in results.columns:
+        print(col.capitalize())
+        print(results[col].nlargest(15))
+        print('\n\n')
+
+
+def evaluate_spi(result_path: str, spi_result_path: str = None):
+
+    if spi_result_path is not None:
+        results = pd.read_parquet(spi_result_path)
+        print_results(results)
+        return results
+
+    # get the dataset from the result folder and make sure there is only one
+    dataset_path = glob(os.path.join(result_path, '*.parquet'))
+    assert len(dataset_path) == 1, f'There is more than one dataset in the result path: {dataset_path}.'
+    dataset_path = dataset_path.pop()
+    dataset = pd.read_parquet(dataset_path)
+    print(f'We have {dataset.shape[1]} signals with {dataset.shape[0]} samples per signal.')
+
+    # find the rooms
+    rooms = {col.split('_')[0] for col in dataset.columns}
+
+    # get start the PySPI package once (so all JVM and octave are active)
+    with HiddenPrints():
+        calc = pyspi.calculator.Calculator(subset='fast')
+
+    # load the results
+    result_df, measures, timing_dict, defined, terminated, undefined = find_and_load_results(result_path, dataset)
+    print(undefined)
+
+    # create dataframe to save results
+    results = pd.DataFrame(index=measures,
+                           columns=["gross accuracy", "median rank", "pairwise auroc", "Adjusted Rand Index",
+                                    "Normalized Mutual Information", "Adjusted Mutual Information", "Homogeneity",
+                                    "Completeness", "V-Measure", 'Triplet Accuracy', "Mean Average Precision"],
+                           dtype=float)
+
+    # compute the results
+    compute_triplet_accuracy(result_df, measures, results)
+    compute_gross_accuracy(result_df, measures, results)
+    compute_median_rank(result_df, measures, results)
+    compute_pairwise_auroc(result_df, measures, results)
+    compute_clustering(result_df, measures, results, len(rooms))
+    compute_map(result_df, measures, results)
+
+    # save the results for quick loading
+    print_results(results)
+    results.to_parquet('result_spi.parquet')
+    return results
+
+
+if __name__ == '__main__':
+    evaluate_spi(r'measurements\all_spis\spi_plant_2')
