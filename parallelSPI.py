@@ -3,7 +3,6 @@
 # WARNING: This only works on LINUX platforms.
 
 import os
-import signal
 import subprocess
 import multiprocessing as mp
 import loadBuildingData as ldb
@@ -71,7 +70,7 @@ def iterate_config(config_path: str):
             spi_configs = spi_configs.get('configs', None)
             if spi_configs is None:
                 keep_dict['configs'] = None
-                yield keep_dict
+                yield {spi_type: {spi_name: keep_dict}}
             else:
                 for config in spi_configs:
                     # this needs to be a list otherwise it will fail!
