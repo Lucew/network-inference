@@ -7,7 +7,6 @@ from pyspi.calculator import Calculator
 import dill
 from tqdm import tqdm
 import numpy as np
-import multiprocessing as mp
 import functools
 
 from sklearn.metrics import roc_auc_score
@@ -194,6 +193,29 @@ def compute_pairwise_auroc(spi_df: pd.DataFrame, measures: list[str], results: p
         results.loc[table, "pairwise auroc"] = roc_auc
 
 
+def triplet_binary_search(positive_similarities: np.ndarray, negative_similarities: np.ndarray):
+
+    # sort both arrays so we can binary search in them
+    negative_similarities.sort()
+    positive_similarities.sort()
+
+    # we assume that positive examples are fewer, therefore, we iterate over the positive
+    # and search in negative with binary search (our correct triplets are how many negatives are
+    # smaller, which is exactly the index result of binary search)
+    correct = np.sum(np.searchsorted(negative_similarities, positive_similarities))
+    return correct, (positive_similarities.shape[0]*negative_similarities.shape[0])
+
+
+def triplet_pandas_cross(positive_similarities: pd.DataFrame, negative_similarities: pd.DataFrame):
+
+    # make the cross-product of negative and positive samples
+    cross = positive_similarities.merge(negative_similarities, how='cross').to_numpy()
+
+    # count how many positive similarities are higher
+    count = np.sum(cross[:, 0] > cross[:, 1])
+    return count, cross.shape[0]
+
+
 def compute_triplet_accuracy(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame, progress: bool = True):
 
     # create a progress bar wrapper
@@ -204,7 +226,11 @@ def compute_triplet_accuracy(spi_df: pd.DataFrame, measures: list[str], results:
             for _idx in iterable:
                 yield _idx
 
-    # make the triplet accuracy
+    # This is the fastest (and somewhat memory efficient) triplet accuracy implementation I could come up with.
+    # Remember: Never use loops in Python, especially when nested three times.
+    #
+    # WARNING: This counts triplets at least twice, but it is the same implementation as in other papers,
+    # so we keep it like this to be comparable
     for table in wrapper(measures):
         # get a copy of the results
         currtab = spi_df[table].copy()
@@ -215,8 +241,12 @@ def compute_triplet_accuracy(spi_df: pd.DataFrame, measures: list[str], results:
         # get the rooms from the sensors
         rooms = [ele.split('_', 1)[0] for ele in sensors]
 
-        # Make all the triplets and whether they are successful. This is the fastest implementation
-        # I could come up with. Remember: Never use loops in Python, especially when nested three times.
+        # for every room get the positive and negative examples
+        positive_idces = dict()
+        for room in set(rooms):
+            positive_idces[room] = currtab.index.str.startswith(room)
+
+        # Make all the triplets and whether they are successful
         summed = 0
         count = 0
         for adx, anchor in enumerate(sensors):
@@ -225,16 +255,17 @@ def compute_triplet_accuracy(spi_df: pd.DataFrame, measures: list[str], results:
             anchor_system = rooms[adx]
 
             # get the positive samples values with the same room
-            positive = currtab.loc[currtab.index.str.startswith(anchor_system), [anchor]]
+            positive = currtab.loc[positive_idces[anchor_system], [anchor]]
             positive = positive.drop(anchor, axis=0, inplace=False)
 
             # get all the negative samples
-            negative = currtab.loc[~currtab.index.str.startswith(anchor_system), [anchor]]
+            negative = currtab.loc[~positive_idces[anchor_system], [anchor]]
 
-            # make the cross-product of negative and positive samples
-            cross = positive.merge(negative, how='cross').to_numpy()
-            summed += np.sum(cross[:, 0] > cross[:, 1])
-            count = cross.shape[0]
+            # check how many positive samples are more similar than negative ones
+            # correct, count = triplet_pandas_cross(positive, negative)
+            correct, count = triplet_binary_search(positive.to_numpy()[:, 0], negative.to_numpy()[:, 0])
+            summed += correct
+            count += count
 
         # compute the triplet accuracy
         results.loc[table, 'Triplet Accuracy'] = summed / count
@@ -343,7 +374,6 @@ def evaluate_spi(result_path: str, spi_result_path: str = None):
 
     # load the results
     result_df, measures, timing_dict, defined, terminated, undefined = find_and_load_results(result_path, dataset)
-    print(undefined)
 
     # create dataframe to save results
     results = pd.DataFrame(index=measures,
@@ -367,4 +397,4 @@ def evaluate_spi(result_path: str, spi_result_path: str = None):
 
 
 if __name__ == '__main__':
-    evaluate_spi(r'measurements\all_spis\spi_plant_2')
+    evaluate_spi(r'measurements\all_spis\spi_keti')
