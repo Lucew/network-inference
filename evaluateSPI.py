@@ -8,6 +8,7 @@ import dill
 from tqdm import tqdm
 import numpy as np
 import functools
+import typing
 
 from sklearn.metrics import roc_auc_score
 from sklearn.cluster import SpectralClustering
@@ -99,10 +100,18 @@ def find_and_load_results(result_path: str, original_dataset: pd.DataFrame):
     return result_df, measures, timing_dict, defined, terminated, undefined
 
 
+def metric_progress_wrapper(func_name: str, iterable: typing.Iterable, total: int = None) -> tqdm:
+    description_text = f'{func_name} - Going through measures'
+    if total is not None:
+        return tqdm(iterable, desc=description_text, total=total)
+    else:
+        return tqdm(iterable, desc=description_text)
+
+
 def compute_gross_accuracy(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame):
 
     # produce the results
-    for table in tqdm(measures, desc='Going through measures'):
+    for table in metric_progress_wrapper('Gross Accuracy', measures):
         gross_accuracy = 0
 
         # drop from the index, so we can't use it to compare
@@ -140,30 +149,30 @@ def compute_gross_accuracy(spi_df: pd.DataFrame, measures: list[str], results: p
         results.loc[table, "gross accuracy"] = gross_accuracy / currtab.shape[1]
 
 
-def compute_median_rank(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame):
+def compute_reciprocal_rank(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame):
 
     # produce the results
-    for table in tqdm(measures, desc='Going through measures'):
+    for table in metric_progress_wrapper('Reciprocal Rank', measures):
 
         # get a copy of the results
         currtab = spi_df[table].copy()
 
         # go through all columns and check the rank of other sensors from the same room
-        ranks = 0
+        reciprocal_ranks = 0
         for col in currtab.columns:
             # Extract the room number and type from the original string
             room, type_to_exclude = col.split('_', 1)
 
             # get the median rank of the sensors
-            median_rank = currtab[col].rank(ascending=False).filter(regex=rf'^{room}_(?!{type_to_exclude}$)').median()
-            ranks += median_rank
-        results.loc[table, "median rank"] = -ranks / len(currtab.columns)
+            max_rank = currtab[col].rank(ascending=False).filter(regex=rf'^{room}_(?!{type_to_exclude}$)').min()
+            reciprocal_ranks += 1/max_rank
+        results.loc[table, "Mean Reciprocal Rank"] = reciprocal_ranks / len(currtab.columns)
 
 
 def compute_pairwise_auroc(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame):
 
     # now we can also use auroc to for pairwise interactions
-    for table in tqdm(measures, desc='Going through measures'):
+    for table in metric_progress_wrapper('Pairwise Auroc', measures):
 
         # get a copy of the results
         currtab = spi_df[table].copy()
@@ -216,22 +225,14 @@ def triplet_pandas_cross(positive_similarities: pd.DataFrame, negative_similarit
     return count, cross.shape[0]
 
 
-def compute_triplet_accuracy(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame, progress: bool = True):
-
-    # create a progress bar wrapper
-    if progress:
-        wrapper = functools.partial(tqdm, total=len(measures), desc='Going through measures')
-    else:
-        def wrapper(iterable):
-            for _idx in iterable:
-                yield _idx
+def compute_triplet_accuracy(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame):
 
     # This is the fastest (and somewhat memory efficient) triplet accuracy implementation I could come up with.
     # Remember: Never use loops in Python, especially when nested three times.
     #
     # WARNING: This counts triplets at least twice, but it is the same implementation as in other papers,
     # so we keep it like this to be comparable
-    for table in wrapper(measures):
+    for table in metric_progress_wrapper('Triplet Accuracy', measures):
         # get a copy of the results
         currtab = spi_df[table].copy()
 
@@ -248,7 +249,7 @@ def compute_triplet_accuracy(spi_df: pd.DataFrame, measures: list[str], results:
 
         # Make all the triplets and whether they are successful
         summed = 0
-        count = 0
+        triplets = 0
         for adx, anchor in enumerate(sensors):
 
             # find the room of the anchor sensor
@@ -262,19 +263,21 @@ def compute_triplet_accuracy(spi_df: pd.DataFrame, measures: list[str], results:
             negative = currtab.loc[~positive_idces[anchor_system], [anchor]]
 
             # check how many positive samples are more similar than negative ones
-            # correct, count = triplet_pandas_cross(positive, negative)
+            # correct1, count1 = triplet_pandas_cross(positive, negative)
             correct, count = triplet_binary_search(positive.to_numpy()[:, 0], negative.to_numpy()[:, 0])
+            # assert correct1 == correct
+            # assert count1 == count
             summed += correct
-            count += count
+            triplets += count
 
         # compute the triplet accuracy
-        results.loc[table, 'Triplet Accuracy'] = summed / count
+        results.loc[table, 'Triplet Accuracy'] = summed / triplets
 
 
 def compute_clustering(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame, num_clusters: int):
 
     # now we can also use auroc to for pairwise interactions
-    for table in tqdm(measures, desc='Going through measures'):
+    for table in metric_progress_wrapper('Clustering', measures):
         # get a copy of the results
         currtab = spi_df[table].copy()
         currtab.loc[:, :] -= currtab.min().min()
@@ -317,7 +320,7 @@ def compute_map(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame
     # MAP: https://link.springer.com/referenceworkentry/10.1007/978-0-387-39940-9_492
 
     # produce the results
-    for table in tqdm(measures, desc='Going through measures'):
+    for table in metric_progress_wrapper('Mean Average Precision', measures):
 
         # drop from the index, so we can't use it to compare
         currtab = spi_df[table].copy()
@@ -342,11 +345,52 @@ def compute_map(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame
         results.loc[table, "Mean Average Precision"] = average_precision_sum/len(currtab.columns)
 
 
+def compute_normalized_discounted_gain(spi_df: pd.DataFrame, measures: list[str], results: pd.DataFrame):
+
+    # produce the results
+    for table in metric_progress_wrapper('Normalized Discount Cumulative Gain', measures):
+
+        # drop from the index, so we can't use it to compare
+        currtab = spi_df[table].copy()
+        ranked_currtab = currtab.rank(method='average', ascending=False)
+
+        # make a copy to create the ground truth
+        gt = ranked_currtab.copy()
+        gt.loc[:, :] = 0
+
+        # make a numpy array that shows the rooms
+        first_letters = [ele[0] for ele in gt.index.str.split('_')]
+
+        # go through the columns of the ground truth and place the ground truth
+        for col in gt.columns:
+            room = col.split('_')[0]
+            gt.loc[[ele == room for ele in first_letters], col] = 1
+
+        # get rid of the rooms themselves (as those are not part of the correct ground truth)
+        diagonal_mask = np.eye(currtab.shape[0], dtype=bool)
+        gt[diagonal_mask] = 0
+
+        # compute the logarithm of all the ranks and weight with relevance
+        ranked_currtab[diagonal_mask] = 1  # make sure there are no NaN in the array
+        ranked_currtab.loc[:, :] += 1
+        ranked_currtab = np.log2(ranked_currtab.to_numpy())
+
+        # compute the dcg per sensor
+        dcg = np.sum((1/ranked_currtab)*gt.to_numpy(), axis=0)
+
+        # compute the idcg per sensor
+        per_sensor_correct = np.sum(gt.to_numpy(), axis=0).astype('int')
+        idcg = np.array([np.sum(1/np.log2(np.array(range(2, amount+2)))) for amount in per_sensor_correct])
+
+        # fill in the result
+        results.loc[table, "Normalized Discount Cumulative Gain"] = np.mean(dcg/idcg)
+
+
 def print_results(results: pd.DataFrame):
 
     # print the results
     for col in results.columns:
-        print(col.capitalize())
+        print(col)
         print(results[col].nlargest(15))
         print('\n\n')
 
@@ -377,24 +421,26 @@ def evaluate_spi(result_path: str, spi_result_path: str = None):
 
     # create dataframe to save results
     results = pd.DataFrame(index=measures,
-                           columns=["gross accuracy", "median rank", "pairwise auroc", "Adjusted Rand Index",
+                           columns=["gross accuracy", "Mean Reciprocal Rank", "pairwise auroc", "Adjusted Rand Index",
                                     "Normalized Mutual Information", "Adjusted Mutual Information", "Homogeneity",
-                                    "Completeness", "V-Measure", 'Triplet Accuracy', "Mean Average Precision"],
+                                    "Completeness", "V-Measure", 'Triplet Accuracy', "Mean Average Precision",
+                                    "Normalized Discount Cumulative Gain"],
                            dtype=float)
 
     # compute the results
     compute_triplet_accuracy(result_df, measures, results)
     compute_gross_accuracy(result_df, measures, results)
-    compute_median_rank(result_df, measures, results)
+    compute_reciprocal_rank(result_df, measures, results)
     compute_pairwise_auroc(result_df, measures, results)
     compute_clustering(result_df, measures, results, len(rooms))
     compute_map(result_df, measures, results)
+    compute_normalized_discounted_gain(result_df, measures, results)
 
     # save the results for quick loading
     print_results(results)
-    results.to_parquet('result_spi.parquet')
+    results.to_parquet(f'result_{os.path.split(result_path)[-1]}.parquet')
     return results
 
 
 if __name__ == '__main__':
-    evaluate_spi(r'measurements\all_spis\spi_keti')
+    evaluate_spi(r'measurements\all_spis\spi_rotary')
