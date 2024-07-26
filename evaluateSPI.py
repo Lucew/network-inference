@@ -196,8 +196,8 @@ def compute_pairwise_auroc(spi_df: pd.DataFrame, measures: list[str], results: p
 def triplet_binary_search(positive_similarities: np.ndarray, negative_similarities: np.ndarray):
 
     # sort both arrays so we can binary search in them
-    negative_similarities.sort()
-    positive_similarities.sort()
+    negative_similarities.sort(axis=0)
+    positive_similarities.sort(axis=0)
 
     # we assume that positive examples are fewer, therefore, we iterate over the positive
     # and search in negative with binary search (our correct triplets are how many negatives are
