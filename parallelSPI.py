@@ -34,7 +34,7 @@ def run_calculator(input_tuple: tuple[str, str], parquet_path: str, timeout_s: i
     # create the file we want to write the output in
     filet = open(os.path.join(save_path, 'output_file'), 'w')
 
-    # start running the process
+    # start running the process (multiprocessing can't time out, therefore going this way)
     proc = subprocess.Popen(cmd, start_new_session=True, stderr=filet, stdout=filet)
 
     # put a timeout on the process
