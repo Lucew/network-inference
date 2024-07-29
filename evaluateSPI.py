@@ -1,3 +1,4 @@
+import collections
 import os
 import sys
 import pandas as pd
@@ -412,12 +413,22 @@ def evaluate_spi(result_path: str, spi_result_path: str = None):
     # find the rooms
     rooms = {col.split('_')[0] for col in dataset.columns}
 
+    # find sensors that have no neighbors by counting
+    cn = collections.Counter(col.split('_', 1)[0] for col in dataset.columns)
+    cn = {name for name, amount in cn.items() if amount <= 1}
+    dropped_sensors = [ele for ele in dataset.columns if any(ele.startswith(name) for name in cn)]
+
     # get start the PySPI package once (so all JVM and octave are active)
     with HiddenPrints():
         calc = pyspi.calculator.Calculator(subset='fast')
 
     # load the results
     result_df, measures, timing_dict, defined, terminated, undefined = find_and_load_results(result_path, dataset)
+
+    # drop the sensors that have no neighbors
+    print(f'Dropping {len(dropped_sensors)} sensors as they have no partner.')
+    result_df = result_df.drop(index=dropped_sensors)
+    result_df = result_df.drop(columns=dropped_sensors, level=1)
 
     # create dataframe to save results
     results = pd.DataFrame(index=measures,
@@ -443,4 +454,4 @@ def evaluate_spi(result_path: str, spi_result_path: str = None):
 
 
 if __name__ == '__main__':
-    evaluate_spi(r'measurements\all_spis\spi_rotary')
+    evaluate_spi(r'measurements\all_spis\spi_soda', spi_result_path='result_spi_soda.parquet')
