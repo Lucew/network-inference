@@ -4,6 +4,8 @@ pyarrow
 pandas
 scikit-learn
 pyspi==1.1.0
+scipy
+networkx
 
 # administrative libraries
 dill
