@@ -165,9 +165,9 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
     if workers > mp.cpu_count():
         raise ValueError(f'We can not use more workers than cores. You defined [{workers}], we have {mp.cpu_count()}.')
 
-    # set the time for the dataset if not specified, here we allow 100ms per comparison
+    # set the time for the dataset if not specified, here we allow 250ms per comparison
     if timeout_s is None:
-        timeout_s = int(dataset.shape[1]*dataset.shape[1]*1)
+        timeout_s = int(dataset.shape[1]*dataset.shape[1]*250)
 
     # save the configuration in there
     with open(os.path.join(curr_path, 'config.txt'), 'w') as filet:
