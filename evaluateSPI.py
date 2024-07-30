@@ -27,10 +27,29 @@ class HiddenPrints:
         sys.stdout = self._original_stdout
 
 
+def parse_spi_information(path: str = 'distance_or_similarity.txt'):
+    spi_information = dict()
+    with open(path, 'r') as filet:
+        for line in filet.readlines():
+            if line.startswith('#') or not line or line == '\n':
+                continue
+            if ' # ' in line:
+                line = line.split(' # ', 1)[0]
+            name, typed = line.split(': ')
+            typed = typed.strip()
+            name = name.strip()
+            spi_information[name] = typed
+            assert typed == 'distance' or typed == 'similarity', f'Something is off {line}.'
+    return spi_information
+
+
 def find_and_load_results(result_path: str, original_dataset: pd.DataFrame):
 
     # find all the folders in the directory
     folders = glob(os.path.join(result_path, f'*{os.path.sep}'))
+
+    # load the spi information
+    spi_information = parse_spi_information()
 
     # Go through all the folders and check the output file if the process was terminated
     # or successful. Additionally, load the pkl calculator if the process was not terminated
@@ -72,6 +91,12 @@ def find_and_load_results(result_path: str, original_dataset: pd.DataFrame):
         assert len(spi_name) == 1, f'In folder {folder} are multiple SPIs: {spi_name}.'
         spi_name = spi_name.pop()
         timing_dict[spi_name] = timing_lines
+
+        # check if the spi is a distance or similarity and invert the values if it is a distance
+        spi_group = spi_name.split('_', 1)[0]
+        spi_group = spi_group.split('-', 1)[0]
+        if spi_information[spi_group] == 'distance':
+            defined[-1] = defined[-1].min().min() + (defined[-1].max().max() - defined[-1])
 
     # make a debug print
     print(f'From originally {len(folders)} found SPIs. {len(defined)} are defined {len(terminated)} were terminated '
@@ -454,4 +479,4 @@ def evaluate_spi(result_path: str, spi_result_path: str = None):
 
 
 if __name__ == '__main__':
-    evaluate_spi(r'measurements\all_spis\spi_soda', spi_result_path='result_spi_soda.parquet')
+    evaluate_spi(r'measurements\all_spis\spi_rotary')
