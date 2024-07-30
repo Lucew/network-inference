@@ -167,7 +167,7 @@ def main(path: str, dataset_name: str, sampling_rate: str, timeout_s: int, worke
 
     # set the time for the dataset if not specified, here we allow 100ms per comparison
     if timeout_s is None:
-        timeout_s = int(dataset.shape[1]*dataset.shape[1]*0.1)
+        timeout_s = int(dataset.shape[1]*dataset.shape[1]*1)
 
     # save the configuration in there
     with open(os.path.join(curr_path, 'config.txt'), 'w') as filet:
