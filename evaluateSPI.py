@@ -63,9 +63,14 @@ def find_and_load_results(result_path: str, original_dataset: pd.DataFrame):
         with open(os.path.join(folder, 'output_file')) as filet:
             output = filet.readlines()
 
+        # try to get the SPI name
+        spi_name_estimate = [line for line in output if line.startswith('Processing [')]
+        assert len(spi_name_estimate) >= 1, f'There is something off with the output of in: {folder}'
+        spi_name_estimate = spi_name_estimate[0].split(']')[0].split(' ')[-1]
+
         # check the lines of the process was terminated
         if any(line.startswith('Terminating the whole process group...') for line in output):
-            terminated.append(folder)
+            terminated.append((spi_name_estimate, folder))
             continue
 
         # check the output whether it terminated
@@ -73,7 +78,7 @@ def find_and_load_results(result_path: str, original_dataset: pd.DataFrame):
         assert len(timing_lines) <= 1, f'There is something off with the output of in: {folder}'
 
         if len(timing_lines) == 0:
-            undefined.append(folder)
+            undefined.append((spi_name_estimate, folder))
             continue
 
         # extract the timing
@@ -90,6 +95,7 @@ def find_and_load_results(result_path: str, original_dataset: pd.DataFrame):
         spi_name = set(intermediate.table.columns.get_level_values(0))
         assert len(spi_name) == 1, f'In folder {folder} are multiple SPIs: {spi_name}.'
         spi_name = spi_name.pop()
+        assert spi_name == spi_name_estimate, f'There is something off with the output of in: {folder}'
         timing_dict[spi_name] = timing_lines
 
         # check if the spi is a distance or similarity and invert the values if it is a distance
@@ -122,6 +128,8 @@ def find_and_load_results(result_path: str, original_dataset: pd.DataFrame):
                 and not np.isinf(result_df[table].to_numpy()).any()]
     result_df = result_df[measures]
     print(f'We retained {len(measures)}/{original_amount} similarity measures (others were NaN or Inf).')
+    # print('Specifiers for the NaN SPIs:')
+    # print(collections.Counter(ele.split('_', 1)[0].split('-', 1)[0] for ele in measures))
 
     return result_df, measures, timing_dict, defined, terminated, undefined
 
@@ -449,6 +457,10 @@ def evaluate_spi(result_path: str, spi_result_path: str = None):
 
     # load the results
     result_df, measures, timing_dict, defined, terminated, undefined = find_and_load_results(result_path, dataset)
+    # print('Specifiers for the terminated SPIs:')
+    # print(collections.Counter(ele[0].split('_', 1)[0].split('-', 1)[0] for ele in terminated))
+    # print('Specifiers for the undefined SPIs:')
+    # print(collections.Counter(ele[0].split('_', 1)[0].split('-', 1)[0] for ele in undefined))
 
     # drop the sensors that have no neighbors
     print(f'Dropping {len(dropped_sensors)} sensors as they have no partner.')
@@ -479,4 +491,4 @@ def evaluate_spi(result_path: str, spi_result_path: str = None):
 
 
 if __name__ == '__main__':
-    evaluate_spi(r'measurements\all_spis\spi_rotary')
+    evaluate_spi(r'measurements\all_spis\spi_plant1')
