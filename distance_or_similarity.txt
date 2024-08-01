@@ -59,7 +59,7 @@ sgc: similarity
 
 # Miscellaneous
 coint: similarity
-gpfit: similarity
+gpfit: distance
 lmfit: distance
 pec: similarity
 
