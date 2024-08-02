@@ -5,7 +5,7 @@ import os
 import matplotlib.pyplot as plt
 import makeCDID as mkd
 import seaborn as sns
-import networkx as nx
+
 
 def load_results(path: str):
     # get all the results into memory
@@ -15,24 +15,37 @@ def load_results(path: str):
     return results
 
 
-def make_create_ranks(path: str = './'):
+def make_create_ranks(path: str = './', metric_subset: str = 'all', dataset_subset: str = 'all'):
 
     # load the files
     results = load_results(path)
 
     # define the metrics to select
-    metrics = ["Mean Reciprocal Rank", "pairwise auroc", "Adjusted Rand Index", "Adjusted Mutual Information", "V-Measure", 'Triplet Accuracy', "Mean Average Precision", "Normalized Discount Cumulative Gain"]
-    # metrics = ["Mean Reciprocal Rank", "Mean Average Precision", "Normalized Discount Cumulative Gain", "Triplet Accuracy"]
-    # metrics = ["Adjusted Rand Index", "V-Measure"]
-    # metrics = ["Mean Reciprocal Rank", "Adjusted Rand Index", "V-Measure", 'Triplet Accuracy', "Mean Average Precision", "Normalized Discount Cumulative Gain"]
+    if metric_subset == 'ir':
+        metrics = ["Mean Reciprocal Rank", "Mean Average Precision", "Normalized Discount Cumulative Gain", "Triplet Accuracy"]
+    elif metric_subset == 'cluster':
+        metrics = ["Adjusted Rand Index", "V-Measure", "Adjusted Mutual Information"]
+    elif metric_subset == 'all':
+        metrics = ["Mean Reciprocal Rank", "Mean Average Precision", "Normalized Discount Cumulative Gain", "Triplet Accuracy", "Adjusted Rand Index", "V-Measure", "Adjusted Mutual Information"]
+    else:
+        raise ValueError(f'Metric subset {metric_subset} is not valid.')
+
+    # only keep selected datasets
+    if dataset_subset == 'all':
+        pass
+    elif dataset_subset == 'building':
+        buildings_datasets = {'soda', 'keti'}
+        results = {name: data for name, data in results.items() if name in buildings_datasets}
+    elif dataset_subset == 'plant':
+        results = {name: data for name, data in results.items() if name.startswith('plant')}
+    else:
+        raise ValueError(f'Dataset subset {metric_subset} is not valid.')
 
     # go through the results and compute the means as well as a set of metrics that finished for all
     spis = list(functools.reduce(lambda x, y: x & y, (set(data.index) for data in results.values())))
-    print(spis)
+    print(len(spis), spis)
     ranks = dict()
     for name, data in results.items():
-        if not name.startswith('plant'):
-            continue
         # get the average ranks over the different metrics for each dataset
         ranks[name] = data.loc[spis, metrics].rank(ascending=False).mean(axis=1)
 
@@ -66,6 +79,10 @@ def make_create_ranks(path: str = './'):
         complete_ranks[(dataset, 'Mean Rank')] = information.mean(axis=1)
     complete_ranks = pd.DataFrame(complete_ranks)
 
+    # sort the datasets by their inverted string
+    column_order = sorted(set(complete_ranks.columns.get_level_values(0)), key=lambda x: x[::-1])
+    complete_ranks = complete_ranks[column_order]
+
     return ranks, results, overall_rank, complete_ranks
 
 
@@ -96,7 +113,7 @@ def make_plot(df: pd.DataFrame, amount: int = 5):
     # Plotting
     plt.figure(figsize=(10, 6))
     ax = plt.gca()
-    ax.set_xlim([1, int(df["Performance"].max()*1.2)])
+    ax.set_xlim([1, int(df["Performance"].max()*(1.2 if amount < 10 else 1.05))])
 
     # Add a horizontal arrow
     plt.annotate(
@@ -122,7 +139,7 @@ def make_plot(df: pd.DataFrame, amount: int = 5):
             va_text = 'top'
             ha_text = 'right'
             text = f'{value: 0.1f} - {df.index[idx]}        '
-            offset = +20 if abs(last_val_odd-value) < 0.5 else 0
+            offset = -30 if abs(last_val_odd-value) < 0.5 else 0
             last_val_odd = value
         print(45+offset, text)
         plt.text(value, 1, text, ha=ha_text, va=va_text, rotation=45+offset, fontsize='large')
@@ -152,10 +169,7 @@ def make_plot(df: pd.DataFrame, amount: int = 5):
 def make_parallel_coordinates(ranks: pd.DataFrame, overall_rank: pd.DataFrame):
 
     # get the best 10
-    best_ten = list(overall_rank.nsmallest(5, columns='Performance').index)
-    best_ten.append("cov-sq_EmpiricalCovariance")
-    best_ten.append("cov_EmpiricalCovariance")
-    best_ten.append("gc_gaussian_k-1_kt-1_l-1_lt-1")
+    best_ten = list(overall_rank.nsmallest(7, columns='Performance').index)
     ranks = ranks.loc[best_ten, :]
 
     # get the amount of different metrics
@@ -166,15 +180,24 @@ def make_parallel_coordinates(ranks: pd.DataFrame, overall_rank: pd.DataFrame):
     datasets = [ele for idx, ele in enumerate(datasets) if idx == 0 or datasets[idx-1] != ele]
 
     # make the plot
-    fig, ax = plt.subplots(layout="constrained", figsize=(12, 5))
+    fig, ax = plt.subplots(figsize=(12, 6), constrained_layout=True)
     with plt.style.context('ggplot'):
+
+        # reset the index and melt the dataframe
         ranks = ranks.reset_index(inplace=False)
-        pd.plotting.parallel_coordinates(ranks, marker='x', linestyle='solid', class_column="index")
+        melted_df = ranks.melt(id_vars=[('index', '')], value_vars=list(ranks.columns)[1:])
+        melted_df = melted_df.rename(columns={('index', ''): "spi"})
+        melted_df['Type'] = [ele.split('_', 1)[0] for ele in melted_df["spi"]]
+        melted_df["variable_0"] = melted_df["variable_0"] + ', ' + melted_df["variable_1"]
+        melted_df = melted_df.drop(columns="variable_1")
+        melted_df = melted_df.rename(columns={"variable_0": "Metric"})
+        sns.lineplot(melted_df, x='Metric', y='value', hue="spi", style="spi")
 
         # get the xticks and change them
         new_labels = []
+        plt.grid(True)
         for ele in ax.get_xticklabels():
-            ele.set_text(ele.get_text().split(', ')[1][1:-2])
+            ele.set_text(ele.get_text().split(', ')[1])
             if ele.get_text() == 'Mean Rank':
                 ele.set_fontweight('bold')
             new_labels.append(ele)
@@ -196,12 +219,75 @@ def make_parallel_coordinates(ranks: pd.DataFrame, overall_rank: pd.DataFrame):
         ax.invert_yaxis()
         ax.set_ylabel("Rank")
         plt.xticks(rotation=90)
-        ax.legend(loc='upper center', bbox_to_anchor=(0.55, 0.25), fancybox=True, shadow=True, ncol=(len(best_ten)+1)//2)
+        ax.legend(loc='best', fancybox=True, shadow=True)
         plt.show()
 
 
+def make_parallel_vertical_coordinates(ranks: pd.DataFrame, overall_rank: pd.DataFrame):
+    # get the best 10
+    best_ten = list(overall_rank.nsmallest(7, columns='Performance').index)
+    ranks = ranks.loc[best_ten, :]
+
+    # get the amount of different metrics
+    metrics = set(ranks.columns.get_level_values(1))
+
+    # get the datasets in the correct order
+    datasets = list(ranks.columns.get_level_values(0))
+    datasets = [ele for idx, ele in enumerate(datasets) if idx == 0 or datasets[idx - 1] != ele]
+
+    # make the plot
+    fig, ax = plt.subplots(figsize=(12, 6), constrained_layout=True)
+    with plt.style.context('ggplot'):
+
+        # reset the index and melt the dataframe
+        ranks = ranks.reset_index(inplace=False)
+        melted_df = ranks.melt(id_vars=[('index', '')], value_vars=list(ranks.columns)[1:])
+        melted_df = melted_df.rename(columns={('index', ''): "spi"})
+        melted_df['Type'] = [ele.split('_', 1)[0] for ele in melted_df["spi"]]
+        melted_df["variable_0"] = melted_df["variable_0"] + ', ' + melted_df["variable_1"]
+        melted_df = melted_df.drop(columns="variable_1")
+        melted_df = melted_df.rename(columns={"variable_0": "Metric"})
+        sns.lineplot(melted_df, x='Metric', y='value', hue="spi", style="spi")
+
+        # get the xticks and change them
+        new_labels = []
+        plt.grid(True)
+        for ele in ax.get_xticklabels():
+            ele.set_text(ele.get_text().split(', ')[1])
+            if ele.get_text() == 'Mean Rank':
+                ele.set_fontweight('bold')
+            new_labels.append(ele)
+        ax.set_xticklabels(new_labels)
+        ax.set_xlabel("")
+
+        # make multilevel x-axis
+        sec = ax.secondary_xaxis(location=1)
+        positions = [ele - 1 for ele in list(range(len(metrics), len(metrics) * len(datasets) + 1, len(metrics)))]
+        sec.set_xticks([ele - len(metrics) / 2 for ele in positions], labels=datasets, rotation=90)
+
+        # make the gridlines for the datasets bold
+        gridlines = ax.xaxis.get_gridlines()
+        for pos in positions:
+            gridlines[pos].set_color("k")
+            gridlines[pos].set_linewidth(2.5)
+
+        # invert the axis and show the plot
+        ax.invert_yaxis()
+        ax.set_ylabel("Rank")
+        plt.xticks(rotation=90)
+        plt.yticks(rotation=90)
+        ax.get_legend().remove()
+        # ax.legend(loc='best', fancybox=True, shadow=True, ncol=len(best_ten))
+        plt.show()
+
+
+def main():
+    ranks, results, overall_rank, complete_ranks = make_create_ranks(metric_subset='all', dataset_subset='building')
+    make_plot(overall_rank)
+    make_parallel_coordinates(complete_ranks, overall_rank)
+    make_parallel_vertical_coordinates(complete_ranks, overall_rank)
+    make_group_plot(overall_rank)
+
+
 if __name__ == '__main__':
-    _ranks, _results, _overall_rank, _complete_ranks = make_create_ranks()
-    make_plot(_overall_rank)
-    make_parallel_coordinates(_complete_ranks, _overall_rank)
-    make_group_plot(_overall_rank)
+    main()

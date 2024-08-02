@@ -16,3 +16,4 @@ tqdm
 # plotting libraries
 matplotlib
 seaborn
+graphviz
