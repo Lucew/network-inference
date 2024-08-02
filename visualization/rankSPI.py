@@ -10,7 +10,7 @@ import seaborn as sns
 def load_results(path: str):
     # get all the results into memory
     results = {os.path.split(cp)[-1].split('_', 2)[-1].split('.')[0]: (pd.read_parquet(cp))
-               for cp in glob(os.path.join(path, 'result_*.parquet'))}
+               for cp in glob(os.path.join(path, '..', 'result_*.parquet'))}
     # results.update({f'{name}_2': data for name, data in results.items()})
     return results
 
