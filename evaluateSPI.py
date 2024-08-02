@@ -29,8 +29,17 @@ class HiddenPrints:
 
 def parse_spi_information(path: str = 'distance_or_similarity.txt'):
     spi_information = dict()
+    categorized_spis = collections.defaultdict(list)
     with open(path, 'r') as filet:
+        prev_line = ''
+        curr_category = ''
         for line in filet.readlines():
+
+            # check whether we changed category
+            if line.startswith('#') and (prev_line == '\n' or prev_line == ''):
+                curr_category = line[1:].strip()
+            prev_line = line
+
             if line.startswith('#') or not line or line == '\n':
                 continue
             if ' # ' in line:
@@ -39,8 +48,9 @@ def parse_spi_information(path: str = 'distance_or_similarity.txt'):
             typed = typed.strip()
             name = name.strip()
             spi_information[name] = typed
+            categorized_spis[curr_category].append(name)
             assert typed == 'distance' or typed == 'similarity', f'Something is off {line}.'
-    return spi_information
+    return spi_information, categorized_spis
 
 
 def find_and_load_results(result_path: str, original_dataset: pd.DataFrame):
@@ -49,7 +59,7 @@ def find_and_load_results(result_path: str, original_dataset: pd.DataFrame):
     folders = glob(os.path.join(result_path, f'*{os.path.sep}'))
 
     # load the spi information
-    spi_information = parse_spi_information()
+    spi_information, _ = parse_spi_information()
 
     # Go through all the folders and check the output file if the process was terminated
     # or successful. Additionally, load the pkl calculator if the process was not terminated
