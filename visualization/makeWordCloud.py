@@ -51,7 +51,7 @@ def main():
                 dot.edge(category, item, minlen='1')
 
     # render and write the tex file
-    dot.render(directory='doctest-output').replace('\\', '/')
+    # dot.render(directory='doctest-output').replace('\\', '/')
     with open('graph.tex', 'w') as filet:
 
         # write the main file into the code
