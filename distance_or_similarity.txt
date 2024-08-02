@@ -5,7 +5,7 @@ kendalltau: similarity # squaring might be necessary
 prec: similarity # squaring might be necessary
 spearmanr: similarity # squaring might be necessary
 
-# Distance Similarity
+# Distance Measures
 bary: similarity # barycenter could just be not feasible as similarity/distance
 dcorrx: similarity # 0 is unrelated, 1 is related
 dcorr: similarity # see dcorrx
@@ -57,7 +57,7 @@ plv: similarity
 psi: similarity
 sgc: similarity
 
-# Miscellaneous
+# Misc.
 coint: similarity
 gpfit: distance
 lmfit: distance
