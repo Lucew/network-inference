@@ -3,8 +3,10 @@ import pandas as pd
 from glob import glob
 import os
 import matplotlib.pyplot as plt
+import matplotlib
 import makeCDID as mkd
 import seaborn as sns
+import rankingPlots as rpl
 
 
 def load_results(path: str):
@@ -80,7 +82,7 @@ def make_create_ranks(path: str = './', metric_subset: str = 'all', dataset_subs
     complete_ranks = pd.DataFrame(complete_ranks)
 
     # sort the datasets by their inverted string
-    column_order = sorted(set(complete_ranks.columns.get_level_values(0)), key=lambda x: x[::-1])
+    column_order = sorted(set(complete_ranks.columns.get_level_values(0)), key=lambda x: x[::-1] if x != 'rotary' else 'aa'+x[::-1])
     complete_ranks = complete_ranks[column_order]
 
     return ranks, results, overall_rank, complete_ranks
@@ -98,22 +100,25 @@ def create_cdi_diagram(ranks: pd.DataFrame):
 def make_group_plot(overall_rank: pd.DataFrame):
     overall_rank['group'] = [ele.split('_', 1)[0] for ele in overall_rank.index]
     overall_rank = overall_rank.groupby('group').min()
-    make_plot(overall_rank, 10)
+    return make_plot(overall_rank, 5)
 
 
 def make_plot(df: pd.DataFrame, amount: int = 5):
 
     # compute the mean
     df.sort_values(inplace=True, by="Performance")
+    df = df.nsmallest(amount, columns="Performance")
+    """
     if "cov-sq_EmpiricalCovariance" in df.index and "cov_EmpiricalCovariance" in df.index:
         df = pd.concat((df.nsmallest(amount, columns="Performance"), df.loc[["cov-sq_EmpiricalCovariance"]], df.loc[["cov_EmpiricalCovariance"]]))
     else:
         df = df.nsmallest(amount, columns="Performance")
+    """
 
     # Plotting
-    plt.figure(figsize=(10, 6))
+    fig = plt.figure(figsize=(10, 6))
     ax = plt.gca()
-    ax.set_xlim([1, int(df["Performance"].max()*(1.2 if amount < 10 else 1.05))])
+    ax.set_xlim([2, 20])
 
     # Add a horizontal arrow
     plt.annotate(
@@ -128,24 +133,41 @@ def make_plot(df: pd.DataFrame, amount: int = 5):
     # Adding labels
     last_val_even = -5
     last_val_odd = -5
+    ha_texts = []
+    va_texts = []
+    offsets = []
+    texts = []
+    values = []
     for idx, value in enumerate(df['Performance']):
+        offset = 0
         if idx & 1:
             va_text = 'bottom'
             ha_text = 'left'
-            text = f'-  {df.index[idx]} - {value: 0.1f}'
-            offset = +40 if abs(last_val_even-value) < 0.5 else 0
+            text = f'-{df.index[idx]} - {value: 0.1f}'
+            if abs(last_val_even - value) < 0.4:
+                offsets[-2] -= 20
+                offset = +40
             last_val_even = value
         else:
             va_text = 'top'
             ha_text = 'right'
-            text = f'{value: 0.1f} - {df.index[idx]}        '
-            offset = -30 if abs(last_val_odd-value) < 0.5 else 0
+            text = f'{value: 0.1f} - {df.index[idx]}'
+            if abs(last_val_odd - value) < 0.4:
+                offsets[-2] += 40
+                offset = -20
             last_val_odd = value
-        print(45+offset, text)
-        plt.text(value, 1, text, ha=ha_text, va=va_text, rotation=45+offset, fontsize='large')
+        ha_texts.append(ha_text)
+        va_texts.append(va_text)
+        offsets.append(offset)
+        texts.append(text)
+        values.append(value)
+
+    for value, text, ha_text, va_text, offset in zip(values, texts, ha_texts, va_texts, offsets):
+        plt.text(value, 1, text, ha=ha_text, va=va_text, rotation=50+offset, fontsize=25)
 
     # Customizing the plot
-    plt.xlabel('Average Rank', x=1.025, fontsize='large', fontweight='bold')
+    plt.xlabel('Average Rank', x=1.025, fontsize=15, fontweight='bold')
+    plt.xticks(fontsize=15)
     plt.yticks([])  # Hide the y-axis
     plt.grid(False)  # Remove the grid
 
@@ -164,12 +186,39 @@ def make_plot(df: pd.DataFrame, amount: int = 5):
     # Show plot
     plt.tight_layout()
     plt.show()
+    return fig
+
+
+def make_vertical_group_plot(overall_rank: pd.DataFrame):
+
+    # group the spis
+    overall_rank = overall_rank.copy()
+    overall_rank['group'] = [ele.split('_', 1)[0] for ele in overall_rank.index]
+    overall_rank = overall_rank.groupby('group').min()
+
+    # get the largest ones
+    overall_rank.sort_values(inplace=True, by="Performance")
+    overall_rank = overall_rank.nsmallest(6, columns="Performance")
+
+    # get the figure
+    fig = rpl.graph_ranks(list(overall_rank.loc[:, "Performance"]), list(overall_rank.index), width=10,
+                          labels=True, highv=25, textspace=1.5)
+    plt.show()
+    return fig
+
+def make_parallel_group_plot(ranks: pd.DataFrame, overall_rank: pd.DataFrame):
+    overall_rank['group'] = [ele.split('_', 1)[0] for ele in overall_rank.index]
+    overall_rank = overall_rank.groupby('group').min()
+    ranks['group'] = [ele.split('_', 1)[0] for ele in ranks.index]
+    ranks = ranks.groupby('group').min()
+    ranks.index.name = 'index'
+    return make_parallel_vertical_coordinates(ranks, overall_rank)
 
 
 def make_parallel_coordinates(ranks: pd.DataFrame, overall_rank: pd.DataFrame):
 
     # get the best 10
-    best_ten = list(overall_rank.nsmallest(7, columns='Performance').index)
+    best_ten = list(overall_rank.nsmallest(5, columns='Performance').index)
     ranks = ranks.loc[best_ten, :]
 
     # get the amount of different metrics
@@ -221,6 +270,7 @@ def make_parallel_coordinates(ranks: pd.DataFrame, overall_rank: pd.DataFrame):
         plt.xticks(rotation=45, ha='right')
         ax.legend(loc='best', fancybox=True, shadow=True)
         plt.show()
+        return fig
 
 
 def make_parallel_vertical_coordinates(ranks: pd.DataFrame, overall_rank: pd.DataFrame):
@@ -230,9 +280,10 @@ def make_parallel_vertical_coordinates(ranks: pd.DataFrame, overall_rank: pd.Dat
 
     # get the amount of different metrics
     metrics = set(ranks.columns.get_level_values(1))
+    datasets = set(ranks.columns.get_level_values(0))
 
     # make the plot
-    fig, ax = plt.subplots(figsize=(6, 12), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(6, 12*len(datasets)/7), constrained_layout=True)
     with plt.style.context('ggplot'):
 
         # reset the index and melt the dataframe
@@ -258,16 +309,18 @@ def make_parallel_vertical_coordinates(ranks: pd.DataFrame, overall_rank: pd.Dat
         plt.grid(True)
         for ele, gridline in zip(ax.get_yticklabels(), ax.yaxis.get_gridlines()):
             ele.set_text(ele.get_text().split(', ')[1])
+            ele.set_fontsize(12)
             if ele.get_text() == 'Mean Rank':
                 gridline.set_color("k")
                 gridline.set_linewidth(2.5)
                 ele.set_fontweight('bold')
             if ele.get_text() in ["Adjusted Rand Index", "Adjusted Mutual Information", "V-Measure"]:
-                ele.set_color('#072140')
+                ele.set_fontstyle('italic')
             elif ele.get_text() == 'Mean Rank':
                 pass
             else:
-                ele.set_color('#0099FF')
+                pass
+                # ele.set_color('#0099FF')
             new_labels.append(ele)
         ax.set_yticklabels(new_labels)
         ax.set_ylabel("")
@@ -275,7 +328,7 @@ def make_parallel_vertical_coordinates(ranks: pd.DataFrame, overall_rank: pd.Dat
         # make multilevel x-axis
         sec = ax.secondary_yaxis(location=1)
         positions = [ele - 1 for ele in list(range(len(metrics), len(metrics) * len(datasets) + 1, len(metrics)))]
-        sec.set_yticks([ele - len(metrics) / 2 for ele in positions], labels=datasets)
+        sec.set_yticks([ele - len(metrics) / 2 for ele in positions], labels=datasets, fontsize=12)
 
         # invert the axis and show the plot
         ax.invert_xaxis()
@@ -284,14 +337,39 @@ def make_parallel_vertical_coordinates(ranks: pd.DataFrame, overall_rank: pd.Dat
         # plt.yticks(rotation=90)
         ax.legend(loc='best', fancybox=True, shadow=True)
         plt.show()
+        return fig
+
+
+def make_results_table(overall_rank: pd.DataFrame):
+
+    # get the n-smallest ranks and write them into a table
+    overall_rank = overall_rank.copy()
+    overall_rank['group'] = [ele.split('_', 1)[0] for ele in overall_rank.index]
+    overall_rank = overall_rank.groupby('group').min()
+    overall_rank = overall_rank[[col for col in overall_rank.columns if 'Mean Rank' not in col]]
+
+    #
+    print(overall_rank)
 
 
 def main():
-    ranks, results, overall_rank, complete_ranks = make_create_ranks(metric_subset='all', dataset_subset='all')
-    make_plot(overall_rank)
-    make_parallel_coordinates(complete_ranks, overall_rank)
-    make_parallel_vertical_coordinates(complete_ranks, overall_rank)
-    make_group_plot(overall_rank)
+    metrics = ['all', 'ir', 'cluster']
+    datasets = ['all', 'building', 'plant']
+    # metrics = metrics[0:1]
+    # datasets = datasets[0:1]
+
+    for metric in metrics:
+        for dataset in datasets:
+            ranks, results, overall_rank, complete_ranks = make_create_ranks(metric_subset=metric,
+                                                                             dataset_subset=dataset)
+            # make_plot(overall_rank)
+            # make_parallel_coordinates(complete_ranks, overall_rank)
+            # make_parallel_vertical_coordinates(complete_ranks, overall_rank)
+            # make_results_table(complete_ranks)
+            # fig1 = make_parallel_group_plot(complete_ranks, overall_rank)
+            fig2 = make_vertical_group_plot(overall_rank)
+            # fig1.savefig(f'Parallel_Ranks_Metrics-{metric}_Data-{dataset}.pgf', backend='pgf')
+            fig2.savefig(f'Average_Ranks_Metrics-{metric}_Data-{dataset}.pgf', backend='pgf')
 
 
 if __name__ == '__main__':
