@@ -45,10 +45,12 @@ cohmag: similarity
 phase: similarity
 dcoh: similarity
 dtf: similarity
+ddtf: similarity
 gd: similarity # might not be useful
 icoh: similarity
 ppc: similarity
 pdcoh: similarity
+gpdcoh: similarity
 pli: similarity
 wpli: similarity
 dspli: similarity
