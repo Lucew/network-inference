@@ -112,7 +112,9 @@ def find_and_load_results(result_path: str, original_dataset: pd.DataFrame):
         spi_group = spi_name.split('_', 1)[0]
         spi_group = spi_group.split('-', 1)[0]
         if spi_information[spi_group] == 'distance':
-            defined[-1] = defined[-1].min().min() + (defined[-1].max().max() - defined[-1])
+            mini = defined[-1].min().min()
+            maxi = defined[-1].max().max()
+            defined[-1] = np.exp(-(defined[-1]-mini)/(maxi-mini))
 
     # make a debug print
     print(f'From originally {len(folders)} found SPIs. {len(defined)} are defined {len(terminated)} were terminated '
@@ -461,7 +463,7 @@ def evaluate_spi(result_path: str, spi_result_path: str = None):
     cn = {name for name, amount in cn.items() if amount <= 1}
     dropped_sensors = [ele for ele in dataset.columns if any(ele.startswith(name) for name in cn)]
 
-    # get start the PySPI package once (so all JVM and octave are active)
+    # start the PySPI package once (so all JVM and octave are active)
     with HiddenPrints():
         calc = pyspi.calculator.Calculator(subset='fast')
 
@@ -501,4 +503,4 @@ def evaluate_spi(result_path: str, spi_result_path: str = None):
 
 
 if __name__ == '__main__':
-    evaluate_spi(r'measurements\all_spis\spi_plant1')
+    evaluate_spi(r'measurements\all_spis\spi_rotary')
