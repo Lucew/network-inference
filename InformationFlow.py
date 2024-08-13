@@ -155,7 +155,7 @@ class InformationFlow:
                     self.result.loc[name1, name2] = np.NAN
                     continue
 
-                # compute the normalized information flow from name2 to name1
+                # compute the normalized information flow from name2 to name1 (column to index)
                 tau_12 = self.information_flow(name1, name2)
 
                 # save the result in the dataframe
@@ -227,6 +227,14 @@ def main(dataset_path: str, save_path: str, normalize: bool, symmetric: bool, ab
     evspi.compute_normalized_discounted_gain(result_df, measures, results)
     print(results)
 
+    # print the results
+    return
+    for col in score.columns:
+        print(col)
+        print(score[col].nlargest(5))
+        print(score[col].nsmallest(5))
+        print('\n\n')
+
 
 def parse_bool(input_arg: str) -> bool:
     input_arg = input_arg.lower()
@@ -237,6 +245,7 @@ def parse_bool(input_arg: str) -> bool:
     else:
         raise ValueError(f'{input_arg} is not True or False.')
 
+
 """
 Created on 08 Jun 2023
 Update on 08 Jun 2023
@@ -245,9 +254,9 @@ version: 1.0.0
 Citation: X. San Liang, 2015: Normalizing the causality between time series. Phys. Rev. E 92, 022126.
 """
 
+import numpy as np
 from scipy.stats import norm
 from collections import namedtuple
-
 
 def causality_est(xx1: np.ndarray, xx2: np.ndarray, n=2, alpha=0.95) -> tuple[float, float, float, float]:
     '''
@@ -327,6 +336,12 @@ def causality_est(xx1: np.ndarray, xx2: np.ndarray, n=2, alpha=0.95) -> tuple[fl
 
     T21 = C_infty[0, 1] / C_infty[0, 0] * (-C[1, 0] * dC[0, 0] + C[0, 0] * dC[1, 0]) / detc
 
+    dH1_star = a11
+
+    dH1_noise = b1**2 / (2. * C[0, 0])
+
+    Z = np.abs(T21) + np.abs(dH1_star) + np.abs(dH1_noise)
+
     var_T21 = (C_infty[0, 1] / C_infty[0, 0]) ** 2 * var_a12
 
     z_alpha = norm.ppf((1 + alpha) / 2)
@@ -338,7 +353,7 @@ def causality_est(xx1: np.ndarray, xx2: np.ndarray, n=2, alpha=0.95) -> tuple[fl
     else:
         h = False
 
-    return res(T21, h, err, alpha)
+    return res(T21, h, err, alpha), Z
 
 
 if __name__ == '__main__':
