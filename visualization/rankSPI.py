@@ -11,8 +11,8 @@ import rankingPlots as rpl
 
 def load_results(path: str):
     # get all the results into memory
-    results = {os.path.split(cp)[-1].split('_', 2)[-1].split('.')[0]: (pd.read_parquet(cp))
-               for cp in glob(os.path.join(path, '..', 'result_*.parquet'))}
+    results = {os.path.split(cp)[-1].split('_')[-1].split('.')[0]: (pd.read_parquet(cp))
+               for cp in glob(os.path.join(path, '..', 'result_fused_spi*.parquet'))}
     # results.update({f'{name}_2': data for name, data in results.items()})
     return results
 
@@ -357,19 +357,24 @@ def main():
     datasets = ['all', 'building', 'plant']
     # metrics = metrics[0:1]
     # datasets = datasets[0:1]
+    save_fig = False
 
     for metric in metrics:
         for dataset in datasets:
             ranks, results, overall_rank, complete_ranks = make_create_ranks(metric_subset=metric,
                                                                              dataset_subset=dataset)
+            print(metric, dataset)
+            print(overall_rank['Performance'].nsmallest(10).sort_values(ascending=True))
             # make_plot(overall_rank)
             # make_parallel_coordinates(complete_ranks, overall_rank)
             # make_parallel_vertical_coordinates(complete_ranks, overall_rank)
             # make_results_table(complete_ranks)
-            # fig1 = make_parallel_group_plot(complete_ranks, overall_rank)
+            fig1 = make_parallel_group_plot(complete_ranks, overall_rank)
             fig2 = make_vertical_group_plot(overall_rank)
-            # fig1.savefig(f'Parallel_Ranks_Metrics-{metric}_Data-{dataset}.pgf', backend='pgf')
-            fig2.savefig(f'Average_Ranks_Metrics-{metric}_Data-{dataset}.pgf', backend='pgf')
+            if save_fig:
+                fig1.savefig(f'Parallel_Ranks_Metrics-{metric}_Data-{dataset}.pgf', backend='pgf')
+                fig2.savefig(f'Average_Ranks_Metrics-{metric}_Data-{dataset}.pgf', backend='pgf')
+    plt.show()
 
 
 if __name__ == '__main__':
