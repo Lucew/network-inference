@@ -7,7 +7,8 @@ import networkx
 
 # inspired from orange3 https://docs.orange.biolab.si/3/data-mining-library/reference/evaluation.cd.html
 def graph_ranks(avranks: list[float], names: list[str], lowv: int = None, highv: int = None,
-                width: float = 6, textspace: int = 1, reverse: bool = False, labels: bool = False):
+                width: float = 6, textspace: int = 1, reverse: bool = False, labels: bool = False,
+                height_multiplier: float = 0.25):
     """
     Draws a CD graph, which is used to display the differences in methods'
     performance. See Janez Demsar, Statistical Comparisons of Classifiers over
@@ -89,7 +90,7 @@ def graph_ranks(avranks: list[float], names: list[str], lowv: int = None, highv:
 
     # calculate height needed height of an image
     minnotsignificant = max(2 * 0.25, linesblank)
-    height = cline + ((k + 1) / 2) * 0.25 + minnotsignificant
+    height = cline + ((k + 1) / 2) * height_multiplier + minnotsignificant
 
     fig = plt.figure(figsize=(width, height))
     fig.set_facecolor('white')

@@ -9,18 +9,27 @@ import seaborn as sns
 import rankingPlots as rpl
 
 
-def load_results(path: str):
+def load_results(path: str, use_fused: bool = False):
+
+    # create the type of results
+    if use_fused:
+        typed = f'_fused'
+    else:
+        typed = ''
+
     # get all the results into memory
     results = {os.path.split(cp)[-1].split('_')[-1].split('.')[0]: (pd.read_parquet(cp))
-               for cp in glob(os.path.join(path, '..', 'result_fused_spi*.parquet'))}
+               for cp in glob(os.path.join(path, '..', f'result{typed}_spi*.parquet'))}
+
     # results.update({f'{name}_2': data for name, data in results.items()})
     return results
 
 
-def make_create_ranks(path: str = './', metric_subset: str = 'all', dataset_subset: str = 'all'):
+def make_create_ranks(path: str = './', metric_subset: str = 'all', dataset_subset: str = 'all',
+                      use_fused: bool = False):
 
     # load the files
-    results = load_results(path)
+    results = load_results(path, use_fused)
 
     # define the metrics to select
     if metric_subset == 'ir':
@@ -98,7 +107,7 @@ def create_cdi_diagram(ranks: pd.DataFrame):
 
 
 def make_group_plot(overall_rank: pd.DataFrame):
-    overall_rank['group'] = [ele.split('_', 1)[0] for ele in overall_rank.index]
+    overall_rank['group'] = [ele if ele.startswith('fused') else ele.split('_', 1)[0] for ele in overall_rank.index]
     overall_rank = overall_rank.groupby('group').min()
     return make_plot(overall_rank, 5)
 
@@ -191,25 +200,41 @@ def make_plot(df: pd.DataFrame, amount: int = 5):
 
 def make_vertical_group_plot(overall_rank: pd.DataFrame):
 
-    # group the spis
+    # copy the dataframe
     overall_rank = overall_rank.copy()
-    overall_rank['group'] = [ele.split('_', 1)[0] for ele in overall_rank.index]
+
+    # rename some of the measures
+    index_list = [ele.replace('performance', 'perf') if ele.startswith('fused') else ele for ele in overall_rank.index]
+    overall_rank.index = index_list
+
+    # group with
+    is_fused = any(ele.startswith('fused') for ele in overall_rank.index)
+    overall_rank['group'] = [ele.replace('_', '-') if ele.startswith('fused') else ele.split('_', 1)[0] for ele in overall_rank.index]
     overall_rank = overall_rank.groupby('group').min()
 
     # get the largest ones
     overall_rank.sort_values(inplace=True, by="Performance")
-    overall_rank = overall_rank.nsmallest(6, columns="Performance")
+    overall_rank = overall_rank.nsmallest(8, columns="Performance")
 
     # get the figure
-    fig = rpl.graph_ranks(list(overall_rank.loc[:, "Performance"]), list(overall_rank.index), width=10,
-                          labels=True, highv=25, textspace=1.5)
+    if is_fused:
+        txt_space = 3.4
+        wdth = 15
+        height_multiplier = 0.27
+    else:
+        txt_space = 1.5
+        wdth = 10
+        height_multiplier = 0.27
+    fig = rpl.graph_ranks(list(overall_rank.loc[:, "Performance"]), list(overall_rank.index), width=wdth,
+                          labels=True, highv=25, textspace=txt_space, height_multiplier=height_multiplier)
     plt.show()
     return fig
 
+
 def make_parallel_group_plot(ranks: pd.DataFrame, overall_rank: pd.DataFrame):
-    overall_rank['group'] = [ele.split('_', 1)[0] for ele in overall_rank.index]
+    overall_rank['group'] = [ele.replace('_', '-') if ele.startswith('fused') else ele.split('_', 1)[0] for ele in overall_rank.index]
     overall_rank = overall_rank.groupby('group').min()
-    ranks['group'] = [ele.split('_', 1)[0] for ele in ranks.index]
+    ranks['group'] = [ele.replace('_', '-') if ele.startswith('fused') else ele.split('_', 1)[0] for ele in ranks.index]
     ranks = ranks.groupby('group').min()
     ranks.index.name = 'index'
     return make_parallel_vertical_coordinates(ranks, overall_rank)
@@ -355,14 +380,22 @@ def make_results_table(overall_rank: pd.DataFrame):
 def main():
     metrics = ['all', 'ir', 'cluster']
     datasets = ['all', 'building', 'plant']
-    # metrics = metrics[0:1]
-    # datasets = datasets[0:1]
-    save_fig = False
+    save_fig = True
+    use_fused = True
+
+    # create the string which measurements we use
+    if use_fused:
+        measure_string = f'_Fused'
+        metrics = metrics[0:1]
+        datasets = datasets[0:1]
+    else:
+        measure_string = ''
 
     for metric in metrics:
         for dataset in datasets:
             ranks, results, overall_rank, complete_ranks = make_create_ranks(metric_subset=metric,
-                                                                             dataset_subset=dataset)
+                                                                             dataset_subset=dataset,
+                                                                             use_fused=use_fused)
             print(metric, dataset)
             print(overall_rank['Performance'].nsmallest(10).sort_values(ascending=True))
             # make_plot(overall_rank)
@@ -372,8 +405,8 @@ def main():
             fig1 = make_parallel_group_plot(complete_ranks, overall_rank)
             fig2 = make_vertical_group_plot(overall_rank)
             if save_fig:
-                fig1.savefig(f'Parallel_Ranks_Metrics-{metric}_Data-{dataset}.pgf', backend='pgf')
-                fig2.savefig(f'Average_Ranks_Metrics-{metric}_Data-{dataset}.pgf', backend='pgf')
+                fig1.savefig(f'Parallel_Ranks_Metrics-{metric}_Data-{dataset}{measure_string}.pgf', backend='pgf')
+                fig2.savefig(f'Average_Ranks_Metrics-{metric}_Data-{dataset}{measure_string}.pgf', backend='pgf')
     plt.show()
 
 
