@@ -437,7 +437,7 @@ def print_results(results: pd.DataFrame):
     # print the results
     for col in results.columns:
         print(col)
-        print(results[col].nlargest(15))
+        print(results[col].nlargest(20))
         print('\n\n')
 
 
@@ -498,7 +498,7 @@ def evaluate_spi(result_path: str, spi_result_path: str = None):
 
     # save the results for quick loading
     print_results(results)
-    results.to_parquet(f'result_{os.path.split(result_path)[-1]}.parquet')
+    results.to_parquet(os.path.join('results', f'result_{os.path.split(result_path)[-1]}.parquet'))
     return results
 
 

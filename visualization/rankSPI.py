@@ -19,7 +19,7 @@ def load_results(path: str, use_fused: bool = False):
 
     # get all the results into memory
     results = {os.path.split(cp)[-1].split('_')[-1].split('.')[0]: (pd.read_parquet(cp))
-               for cp in glob(os.path.join(path, '..', f'result{typed}_spi*.parquet'))}
+               for cp in glob(os.path.join(path, '..', 'results', f'result{typed}_spi*.parquet'))}
 
     # results.update({f'{name}_2': data for name, data in results.items()})
     return results
@@ -214,7 +214,10 @@ def make_vertical_group_plot(overall_rank: pd.DataFrame):
 
     # get the largest ones
     overall_rank.sort_values(inplace=True, by="Performance")
-    overall_rank = overall_rank.nsmallest(8, columns="Performance")
+    if is_fused:
+        overall_rank = overall_rank.nsmallest(8, columns="Performance")
+    else:
+        overall_rank = overall_rank.nsmallest(6, columns="Performance")
 
     # get the figure
     if is_fused:
@@ -380,8 +383,8 @@ def make_results_table(overall_rank: pd.DataFrame):
 def main():
     metrics = ['all', 'ir', 'cluster']
     datasets = ['all', 'building', 'plant']
-    save_fig = True
-    use_fused = True
+    save_fig = False
+    use_fused = False
 
     # create the string which measurements we use
     if use_fused:

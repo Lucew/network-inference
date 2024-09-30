@@ -188,8 +188,7 @@ fabric.properties
 # the result folder
 result/
 intermediate_results/
-results/
-*.parquet
+./*.parquet
 
 # any hdf5 files
 *.hdf5
@@ -198,6 +197,7 @@ results/
 # ignore plots
 *.pgf
 *.svg
+*.tex
 
 # ignore the measurements
 measurements/
